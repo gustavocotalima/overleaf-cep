@@ -279,7 +279,7 @@ async function undeleteProject(projectId, options = {}) {
   // if we're undeleting, we want the document to show up
   restored.name = await ProjectDetailsHandler.promises.generateUniqueName(
     deletedProject.deleterData.deletedProjectOwnerId,
-    restored.name + ' (Restored)'
+    restored.name + (options.suffix ?? ' (Restored)')
   )
   restored.archived = undefined
 

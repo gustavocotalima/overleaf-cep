@@ -5,6 +5,7 @@
 
 export default /** @type {const} */ ([
   'account_balance',
+  'add_moderator',
   'arrow_back_ios_new',
   'arrow_circle_up',
   'auto_delete',
@@ -40,10 +41,14 @@ export default /** @type {const} */ ([
   'note_add',
   'open_in_new',
   'password',
+  'pause_circle',
   'picture_as_pdf',
+  'play_circle',
   'push_pin',
   'rate_review',
+  'remove_moderator',
   'report',
+  'restore_from_trash',
   'search',
   'settings',
   'shuffle',
