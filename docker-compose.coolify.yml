@@ -22,6 +22,8 @@ services:
       SANDBOXED_COMPILES: 'true'
       DOCKER_RUNNER: 'true'
       SANDBOXED_COMPILES_SIBLING_CONTAINERS: 'true'
+      ALL_TEX_LIVE_DOCKER_IMAGES: 'texlive/texlive:latest'
+      TEX_LIVE_DOCKER_IMAGE: 'texlive/texlive:latest'
 
   mongo:
     restart: always
