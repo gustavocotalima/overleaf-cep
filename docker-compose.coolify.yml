@@ -34,7 +34,17 @@ services:
     environment:
       MONGO_INITDB_DATABASE: sharelatex
     healthcheck:
-      test: echo 'db.stats().ok' | mongosh localhost:27017/test --quiet
+      test: |
+        mongosh --quiet --eval "
+          try {
+            rs.status();
+          } catch (e) {
+            if (e.codeName === 'NotYetInitialized') {
+              rs.initiate();
+            }
+          }
+          db.stats().ok;
+        "
       interval: 10s
       timeout: 10s
       retries: 5
