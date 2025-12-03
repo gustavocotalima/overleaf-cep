@@ -2,6 +2,8 @@ services:
   overleaf:
     restart: always
     image: sharelatex/sharelatex:ext-ce
+    ports:
+      - "80"
     depends_on:
       mongo:
         condition: service_healthy
@@ -30,7 +32,7 @@ services:
     extra_hosts:
       - mongo:127.0.0.1
     healthcheck:
-      test: echo 'try { rs.status() } catch (e) { rs.initiate({ _id: "overleaf", members: [{ _id: 0, host: "mongo:27017" }] }) }' | mongosh --quiet
+      test: ["CMD", "mongosh", "--eval", "try { rs.status() } catch (e) { rs.initiate({ _id: 'overleaf', members: [{ _id: 0, host: 'mongo:27017' }] }) }", "--quiet"]
       interval: 10s
       timeout: 10s
       retries: 5
