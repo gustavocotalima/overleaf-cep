@@ -75,6 +75,10 @@ COPY server-ce/config/custom-environment-variables.json /overleaf/services/histo
 ADD server-ce/bin/grunt /usr/local/bin/grunt
 RUN chmod +x /usr/local/bin/grunt
 
+# Copy auto-install LaTeX packages script
+ADD server-ce/bin/auto-install-packages.sh /overleaf/services/clsi/bin/auto-install-packages.sh
+RUN chmod +x /overleaf/services/clsi/bin/auto-install-packages.sh
+
 # Copy history helper scripts
 # ---------------------------
 ADD server-ce/bin/flush-history-queues /overleaf/bin/flush-history-queues

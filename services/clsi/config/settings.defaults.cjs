@@ -215,3 +215,11 @@ if ((process.env.DOCKER_RUNNER || process.env.SANDBOXED_COMPILES) === 'true') {
     // )
   }
 }
+
+// Auto-install missing LaTeX packages (for non-sandboxed compiles only)
+if (process.env.AUTO_INSTALL_PACKAGES === 'true') {
+  module.exports.clsi = module.exports.clsi || {}
+  module.exports.clsi.latexmkCommandPrefix = [
+    '/overleaf/services/clsi/bin/auto-install-packages.sh'
+  ]
+}
