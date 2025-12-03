@@ -9,8 +9,7 @@ services:
         condition: service_started
     stop_grace_period: 60s
     volumes:
-      - /opt/overleaf/data:/var/lib/overleaf
-      - /var/run/docker.sock:/var/run/docker.sock
+      - overleaf-data:/var/lib/overleaf
     environment:
       OVERLEAF_APP_NAME: Overleaf Community Edition
       OVERLEAF_MONGO_URL: mongodb://mongo/sharelatex
@@ -19,20 +18,13 @@ services:
       ENABLED_LINKED_FILE_TYPES: 'project_file,project_output_file'
       ENABLE_CONVERSIONS: 'true'
       EMAIL_CONFIRMATION_DISABLED: 'true'
-      SANDBOXED_COMPILES: 'true'
-      SANDBOXED_COMPILES_HOST_DIR_COMPILES: '/opt/overleaf/data/data/compiles'
-      SANDBOXED_COMPILES_HOST_DIR_OUTPUT: '/opt/overleaf/data/data/output'
-      DOCKER_RUNNER: 'true'
-      SANDBOXED_COMPILES_SIBLING_CONTAINERS: 'true'
-      ALL_TEX_LIVE_DOCKER_IMAGES: 'texlive/texlive:latest'
-      TEX_LIVE_DOCKER_IMAGE: 'texlive/texlive:latest'
 
   mongo:
     restart: always
     image: mongo:6.0
     command: '--replSet overleaf'
     volumes:
-      - /opt/overleaf/mongo:/data/db
+      - mongo-data:/data/db
       - ./bin/shared/mongodb-init-replica-set.js:/docker-entrypoint-initdb.d/mongodb-init-replica-set.js
     environment:
       MONGO_INITDB_DATABASE: sharelatex
@@ -48,4 +40,9 @@ services:
     restart: always
     image: redis:6.2
     volumes:
-      - /opt/overleaf/redis:/data
+      - redis-data:/data
+
+volumes:
+  overleaf-data:
+  mongo-data:
+  redis-data:
