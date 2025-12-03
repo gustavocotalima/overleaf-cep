@@ -60,7 +60,8 @@ RUN mkdir /install-tl-unx \
       etoolbox \
       xetex \
 &&  tlmgr path add \
-&&  rm -rf /install-tl-unx
+&&  rm -rf /install-tl-unx \
+&&  chown -R www-data:www-data /usr/local/texlive
 
 # Set up overleaf user and home directory
 RUN adduser --system --group --home /overleaf --no-create-home overleaf && \

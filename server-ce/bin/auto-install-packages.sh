@@ -2,7 +2,7 @@
 # Auto-install missing LaTeX packages during compilation
 # This script wraps latexmk and automatically installs missing packages
 
-MAX_RETRIES=3
+MAX_RETRIES=15
 retry=0
 
 while [ $retry -lt $MAX_RETRIES ]; do
@@ -23,8 +23,8 @@ while [ $retry -lt $MAX_RETRIES ]; do
     # Try to install each missing file
     installed=0
     for file in $missing; do
-        # Search for the package that provides this file
-        pkg=$(tlmgr search --global --file "/$file" 2>/dev/null | head -1 | cut -d: -f1)
+        # Search for the package that provides this file (skip tlmgr info lines)
+        pkg=$(tlmgr search --global --file "/$file" 2>/dev/null | grep -v "^tlmgr:" | head -1 | cut -d: -f1)
         if [ -n "$pkg" ]; then
             echo "[auto-install] Installing $pkg for $file..." >&2
             tlmgr install "$pkg" 2>&1 >&2
