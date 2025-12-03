@@ -1,5 +1,5 @@
 services:
-  sharelatex:
+  overleaf:
     restart: always
     image: sharelatex/sharelatex:ext-ce
     depends_on:
@@ -9,7 +9,7 @@ services:
         condition: service_started
     stop_grace_period: 60s
     volumes:
-      - sharelatex_data:/var/lib/overleaf
+      - overleaf_data:/var/lib/overleaf
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       OVERLEAF_APP_NAME: Overleaf Community Edition
@@ -46,6 +46,6 @@ services:
       - redis_data:/data
 
 volumes:
-  sharelatex_data:
+  overleaf_data:
   mongo_data:
   redis_data:
