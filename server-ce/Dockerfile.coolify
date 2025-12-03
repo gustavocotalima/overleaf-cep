@@ -1,0 +1,170 @@
+# ---------------------------------------------
+# Overleaf Community Edition - Combined Dockerfile for Coolify
+# This Dockerfile includes the base image setup inline
+# to avoid dependency on pre-built Docker Hub images
+# ---------------------------------------------
+
+FROM phusion/baseimage:noble-1.0.2
+
+# Makes sure LuaTex cache is writable
+ENV TEXMFVAR=/var/lib/overleaf/tmp/texmf-var
+
+# Update to ensure dependencies are updated
+ENV REBUILT_AFTER="2025-10-30"
+
+# Install dependencies including Node.js 22
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked true \
+&&  rm -f /etc/apt/apt.conf.d/docker-clean && echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache \
+&&  apt-get update \
+&&  apt-get install -y \
+      unattended-upgrades \
+      build-essential wget net-tools unzip time imagemagick optipng strace nginx git python3 python-is-python3 zlib1g-dev libpcre3-dev gettext-base libwww-perl ca-certificates curl gnupg \
+      qpdf \
+&&  unattended-upgrade --verbose --no-minimal-upgrade-steps \
+&&  mkdir -p /etc/apt/keyrings \
+&&  curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
+&&  echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list \
+&&  apt-get update \
+&&  apt-get install -y nodejs \
+&&  rm -rf \
+      /etc/nginx/nginx.conf \
+      /etc/nginx/sites-enabled/default
+
+# Install TexLive
+ARG TEXLIVE_MIRROR=https://mirror.ox.ac.uk/sites/ctan.org/systems/texlive/tlnet
+
+RUN mkdir /install-tl-unx \
+&&  wget --quiet https://tug.org/texlive/files/texlive.asc \
+&&  gpg --import texlive.asc \
+&&  rm texlive.asc \
+&&  wget --quiet ${TEXLIVE_MIRROR}/install-tl-unx.tar.gz \
+&&  wget --quiet ${TEXLIVE_MIRROR}/install-tl-unx.tar.gz.sha512 \
+&&  wget --quiet ${TEXLIVE_MIRROR}/install-tl-unx.tar.gz.sha512.asc \
+&&  gpg --verify install-tl-unx.tar.gz.sha512.asc \
+&&  sha512sum -c install-tl-unx.tar.gz.sha512 \
+&&  tar -xz -C /install-tl-unx --strip-components=1 -f install-tl-unx.tar.gz \
+&&  rm install-tl-unx.tar.gz* \
+&&  echo "tlpdbopt_autobackup 0" >> /install-tl-unx/texlive.profile \
+&&  echo "tlpdbopt_install_docfiles 0" >> /install-tl-unx/texlive.profile \
+&&  echo "tlpdbopt_install_srcfiles 0" >> /install-tl-unx/texlive.profile \
+&&  echo "selected_scheme scheme-basic" >> /install-tl-unx/texlive.profile \
+&&  /install-tl-unx/install-tl \
+      -profile /install-tl-unx/texlive.profile \
+      -repository ${TEXLIVE_MIRROR} \
+&&  $(find /usr/local/texlive -name tlmgr) path add \
+&&  tlmgr install --repository ${TEXLIVE_MIRROR} \
+      latexmk \
+      texcount \
+      synctex \
+      etoolbox \
+      xetex \
+&&  tlmgr path add \
+&&  rm -rf /install-tl-unx
+
+# Set up overleaf user and home directory
+RUN adduser --system --group --home /overleaf --no-create-home overleaf && \
+    mkdir -p /var/lib/overleaf && \
+    chown www-data:www-data /var/lib/overleaf && \
+    mkdir -p /var/log/overleaf && \
+    chown www-data:www-data /var/log/overleaf && \
+    mkdir -p /var/lib/overleaf/data/template_files && \
+    chown www-data:www-data /var/lib/overleaf/data/template_files
+
+# ---------------------------------------------
+# Main Overleaf setup (from server-ce/Dockerfile)
+# ---------------------------------------------
+
+WORKDIR /overleaf
+
+# Add required source files
+ADD server-ce/genScript.js /overleaf/genScript.js
+ADD server-ce/services.js /overleaf/services.js
+ADD package.json package-lock.json /overleaf/
+ADD libraries/ /overleaf/libraries/
+ADD services/ /overleaf/services/
+ADD tools/migrations/ /overleaf/tools/migrations/
+
+# Add npm patches
+ADD patches/ /overleaf/patches
+
+# Install npm dependencies and build webpack assets
+RUN --mount=type=cache,target=/root/.cache \
+    --mount=type=cache,target=/root/.npm \
+    --mount=type=cache,target=/overleaf/services/web/node_modules/.cache,id=server-ce-webpack-cache \
+    --mount=type=tmpfs,target=/tmp true \
+&&  node genScript install | bash \
+&&  node genScript compile | bash
+
+# Copy runit service startup scripts to its location
+ADD server-ce/runit /etc/service
+
+# Copy runit global settings to its location
+ADD server-ce/config/env.sh /etc/overleaf/env.sh
+
+# Configure nginx
+ADD server-ce/nginx/nginx.conf.template /etc/nginx/templates/nginx.conf.template
+ADD server-ce/nginx/overleaf.conf /etc/nginx/sites-enabled/overleaf.conf
+ADD server-ce/nginx/clsi-nginx.conf /etc/nginx/sites-enabled/clsi-nginx.conf
+
+# Configure log rotation
+ADD server-ce/logrotate/overleaf /etc/logrotate.d/overleaf
+RUN chmod 644 /etc/logrotate.d/overleaf
+
+# Configure cron tasks
+ADD server-ce/cron /overleaf/cron
+ADD server-ce/config/crontab-history /etc/cron.d/crontab-history
+RUN chmod 600 /etc/cron.d/crontab-history
+ADD server-ce/config/crontab-deletion /etc/cron.d/crontab-deletion
+RUN chmod 600 /etc/cron.d/crontab-deletion
+
+# Copy Phusion Image startup and shutdown scripts to their locations
+COPY server-ce/init_scripts/ /etc/my_init.d/
+COPY server-ce/init_preshutdown_scripts/ /etc/my_init.pre_shutdown.d/
+
+# Copy app settings files
+COPY server-ce/config/settings.js /etc/overleaf/settings.js
+
+# Copy history-v1 files
+COPY server-ce/config/production.json /overleaf/services/history-v1/config/production.json
+COPY server-ce/config/custom-environment-variables.json /overleaf/services/history-v1/config/custom-environment-variables.json
+
+# Copy grunt thin wrapper
+ADD server-ce/bin/grunt /usr/local/bin/grunt
+RUN chmod +x /usr/local/bin/grunt
+
+# Copy auto-install LaTeX packages script
+ADD server-ce/bin/auto-install-packages.sh /overleaf/services/clsi/bin/auto-install-packages.sh
+RUN chmod +x /overleaf/services/clsi/bin/auto-install-packages.sh
+
+# Copy history helper scripts
+ADD server-ce/bin/flush-history-queues /overleaf/bin/flush-history-queues
+RUN chmod +x /overleaf/bin/flush-history-queues
+ADD server-ce/bin/force-history-resyncs /overleaf/bin/force-history-resyncs
+RUN chmod +x /overleaf/bin/force-history-resyncs
+
+# Copy Latexmkrc
+COPY server-ce/config/latexmkrc /usr/local/share/latexmk/LatexMk
+
+# File that controls open|closed status of the site
+ENV SITE_MAINTENANCE_FILE="/etc/overleaf/site_status"
+RUN touch $SITE_MAINTENANCE_FILE
+
+# Set Environment Variables
+ENV OVERLEAF_CONFIG=/etc/overleaf/settings.js
+ENV WEB_API_USER="overleaf"
+ENV ADMIN_PRIVILEGE_AVAILABLE="true"
+ENV OVERLEAF_APP_NAME="Overleaf Community Edition"
+ENV OPTIMISE_PDF="true"
+
+# Phusion Image timeouts before sending SIGKILL to processes
+ENV KILL_PROCESS_TIMEOUT=55
+ENV KILL_ALL_PROCESSES_TIMEOUT=55
+ENV GRACEFUL_SHUTDOWN_DELAY_SECONDS=1
+
+ENV NODE_ENV="production"
+ENV LOG_LEVEL="info"
+
+EXPOSE 80
+
+ENTRYPOINT ["/sbin/my_init"]

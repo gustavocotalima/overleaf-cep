@@ -1,7 +1,9 @@
 services:
   overleaf:
     restart: always
-    image: sharelatex/sharelatex:ext-ce
+    build:
+      context: .
+      dockerfile: server-ce/Dockerfile.coolify
     ports:
       - "80"
     depends_on:
