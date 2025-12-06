@@ -1144,6 +1144,7 @@ module.exports = {
     'template-gallery',
     'git-bridge',
     'zotero',
+    'google-drive-backup',
   ],
   viewIncludes: {},
 

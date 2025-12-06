@@ -955,6 +955,7 @@ const _ProjectController = {
         imageNames,
         gitBridgePublicBaseUrl: Settings.gitBridgePublicBaseUrl,
         gitBridgeEnabled: Features.hasFeature('git-bridge'),
+        googleDriveEnabled: Settings.googleDriveBackup?.enabled || false,
         wsUrl,
         showSupport: Features.hasFeature('support'),
         showTemplatesServerPro,
