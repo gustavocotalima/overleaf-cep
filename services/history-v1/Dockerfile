@@ -32,6 +32,7 @@ COPY libraries/stream-utils/package.json /overleaf/libraries/stream-utils/packag
 COPY libraries/validation-tools/package.json /overleaf/libraries/validation-tools/package.json
 COPY services/history-v1/package.json /overleaf/services/history-v1/package.json
 COPY tools/migrations/package.json /overleaf/tools/migrations/package.json
+COPY libraries/eslint-plugin/package.json /overleaf/libraries/eslint-plugin/package.json
 COPY patches/ /overleaf/patches/
 COPY tools/migrations/ /overleaf/tools/migrations/
 

@@ -17,6 +17,7 @@ COPY libraries/logger/package.json /overleaf/libraries/logger/package.json
 COPY libraries/metrics/package.json /overleaf/libraries/metrics/package.json
 COPY libraries/settings/package.json /overleaf/libraries/settings/package.json
 COPY services/references/package.json /overleaf/services/references/package.json
+COPY libraries/eslint-plugin/package.json /overleaf/libraries/eslint-plugin/package.json
 COPY patches/ /overleaf/patches/
 
 RUN cd /overleaf && npm ci --quiet

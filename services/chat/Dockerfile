@@ -22,6 +22,7 @@ COPY libraries/promise-utils/package.json /overleaf/libraries/promise-utils/pack
 COPY libraries/settings/package.json /overleaf/libraries/settings/package.json
 COPY services/chat/package.json /overleaf/services/chat/package.json
 COPY tools/migrations/package.json /overleaf/tools/migrations/package.json
+COPY libraries/eslint-plugin/package.json /overleaf/libraries/eslint-plugin/package.json
 COPY patches/ /overleaf/patches/
 COPY tools/migrations/ /overleaf/tools/migrations/
 

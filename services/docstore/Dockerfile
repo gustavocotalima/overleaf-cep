@@ -24,6 +24,7 @@ COPY libraries/settings/package.json /overleaf/libraries/settings/package.json
 COPY libraries/stream-utils/package.json /overleaf/libraries/stream-utils/package.json
 COPY services/docstore/package.json /overleaf/services/docstore/package.json
 COPY tools/migrations/package.json /overleaf/tools/migrations/package.json
+COPY libraries/eslint-plugin/package.json /overleaf/libraries/eslint-plugin/package.json
 COPY patches/ /overleaf/patches/
 COPY tools/migrations/ /overleaf/tools/migrations/
 

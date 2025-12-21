@@ -26,6 +26,7 @@ COPY libraries/promise-utils/package.json /overleaf/libraries/promise-utils/pack
 COPY libraries/settings/package.json /overleaf/libraries/settings/package.json
 COPY libraries/stream-utils/package.json /overleaf/libraries/stream-utils/package.json
 COPY services/clsi/package.json /overleaf/services/clsi/package.json
+COPY libraries/eslint-plugin/package.json /overleaf/libraries/eslint-plugin/package.json
 COPY patches/ /overleaf/patches/
 
 RUN cd /overleaf && npm ci --quiet

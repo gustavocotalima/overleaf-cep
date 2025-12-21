@@ -19,6 +19,7 @@ COPY libraries/metrics/package.json /overleaf/libraries/metrics/package.json
 COPY libraries/o-error/package.json /overleaf/libraries/o-error/package.json
 COPY libraries/settings/package.json /overleaf/libraries/settings/package.json
 COPY services/linked-url-proxy/package.json /overleaf/services/linked-url-proxy/package.json
+COPY libraries/eslint-plugin/package.json /overleaf/libraries/eslint-plugin/package.json
 COPY patches/ /overleaf/patches/
 
 RUN cd /overleaf && npm ci --quiet

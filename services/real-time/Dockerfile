@@ -22,6 +22,7 @@ COPY libraries/redis-wrapper/package.json /overleaf/libraries/redis-wrapper/pack
 COPY libraries/settings/package.json /overleaf/libraries/settings/package.json
 COPY libraries/validation-tools/package.json /overleaf/libraries/validation-tools/package.json
 COPY services/real-time/package.json /overleaf/services/real-time/package.json
+COPY libraries/eslint-plugin/package.json /overleaf/libraries/eslint-plugin/package.json
 COPY patches/ /overleaf/patches/
 
 RUN cd /overleaf && npm ci --quiet

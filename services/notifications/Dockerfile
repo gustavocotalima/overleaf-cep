@@ -23,6 +23,7 @@ COPY libraries/settings/package.json /overleaf/libraries/settings/package.json
 COPY libraries/validation-tools/package.json /overleaf/libraries/validation-tools/package.json
 COPY services/notifications/package.json /overleaf/services/notifications/package.json
 COPY tools/migrations/package.json /overleaf/tools/migrations/package.json
+COPY libraries/eslint-plugin/package.json /overleaf/libraries/eslint-plugin/package.json
 COPY patches/ /overleaf/patches/
 COPY tools/migrations/ /overleaf/tools/migrations/
 
