@@ -1,0 +1,7 @@
+{"level":"info","message":"Starting SQL Server MCP Server...","timestamp":"2025-12-03T03:57:01.346Z"}
+{"level":"info","message":"Loaded 3 database connections","timestamp":"2025-12-03T03:57:01.347Z"}
+{"level":"info","message":"Registered 7 MCP tools","timestamp":"2025-12-03T03:57:01.347Z"}
+{"level":"info","message":"MCP Server starting with stdio transport...","timestamp":"2025-12-03T03:57:01.348Z"}
+{"level":"info","message":"SQL Server MCP Server running successfully!","timestamp":"2025-12-03T03:57:01.348Z"}
+{"level":"info","message":"ListTools request received","timestamp":"2025-12-03T03:57:01.351Z"}
+{"level":"info","message":"Received SIGINT, shutting down gracefully...","timestamp":"2025-12-03T04:00:10.247Z"}
