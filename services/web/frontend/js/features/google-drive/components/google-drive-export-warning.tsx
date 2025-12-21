@@ -7,9 +7,9 @@ import OLModal, {
   OLModalFooter,
   OLModalHeader,
   OLModalTitle,
-} from '@/features/ui/components/ol-modal'
-import OLButton from '@/features/ui/components/ol-button'
-import OLNotification from '@/features/ui/components/ol-notification'
+} from '@/shared/components/ol/ol-modal'
+import OLButton from '@/shared/components/ol/ol-button'
+import OLNotification from '@/shared/components/ol/ol-notification'
 import getMeta from '@/utils/meta'
 
 // Lazy load the export modal

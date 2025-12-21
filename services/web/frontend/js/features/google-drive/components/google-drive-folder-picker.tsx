@@ -6,8 +6,8 @@ import OLModal, {
   OLModalFooter,
   OLModalHeader,
   OLModalTitle,
-} from '@/features/ui/components/ol-modal'
-import OLButton from '@/features/ui/components/ol-button'
+} from '@/shared/components/ol/ol-modal'
+import OLButton from '@/shared/components/ol/ol-button'
 import MaterialIcon from '@/shared/components/material-icon'
 
 type Folder = {

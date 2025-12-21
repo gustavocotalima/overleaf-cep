@@ -6,12 +6,12 @@ import OLModal, {
   OLModalFooter,
   OLModalHeader,
   OLModalTitle,
-} from '@/features/ui/components/ol-modal'
-import OLButton from '@/features/ui/components/ol-button'
-import OLFormGroup from '@/features/ui/components/ol-form-group'
-import OLFormLabel from '@/features/ui/components/ol-form-label'
-import OLFormControl from '@/features/ui/components/ol-form-control'
-import OLNotification from '@/features/ui/components/ol-notification'
+} from '@/shared/components/ol/ol-modal'
+import OLButton from '@/shared/components/ol/ol-button'
+import OLFormGroup from '@/shared/components/ol/ol-form-group'
+import OLFormLabel from '@/shared/components/ol/ol-form-label'
+import OLFormControl from '@/shared/components/ol/ol-form-control'
+import OLNotification from '@/shared/components/ol/ol-notification'
 import MaterialIcon from '@/shared/components/material-icon'
 
 type DriveFile = {
