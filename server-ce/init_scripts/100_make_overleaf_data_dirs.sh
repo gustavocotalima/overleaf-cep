@@ -28,6 +28,9 @@ chown www-data:www-data /var/lib/overleaf/tmp/dumpFolder
 mkdir -p /var/lib/overleaf/tmp
 chown www-data:www-data /var/lib/overleaf/tmp
 
+mkdir -p /var/lib/overleaf/tmp/texmf-var
+chown www-data:www-data /var/lib/overleaf/tmp/texmf-var
+
 mkdir -p /var/lib/overleaf/tmp/uploads
 chown www-data:www-data /var/lib/overleaf/tmp/uploads
 
