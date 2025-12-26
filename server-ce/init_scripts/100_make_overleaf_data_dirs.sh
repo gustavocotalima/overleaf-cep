@@ -36,3 +36,9 @@ chown -R www-data:www-data /var/lib/overleaf/tmp/texmf-var
 
 mkdir -p /var/lib/overleaf/tmp/uploads
 chown www-data:www-data /var/lib/overleaf/tmp/uploads
+
+# Fix TeX Live permissions for auto-install packages feature
+# The texlive-data volume may have root ownership from previous deployments
+if [ -d /usr/local/texlive ]; then
+    chown -R www-data:www-data /usr/local/texlive
+fi

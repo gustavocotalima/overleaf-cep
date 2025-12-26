@@ -11,8 +11,19 @@ while [ $retry -lt $MAX_RETRIES ]; do
     exit_code=$?
 
     # Look for missing file patterns in LaTeX output
-    missing=$(echo "$output" | grep -oE "File \`[^']+\.(sty|cls|def|fd)' not found" | \
-        sed "s/File \`//;s/' not found//" | sort -u)
+    # Pattern 1: File `xxx.sty' not found (packages, classes, definitions)
+    # Note: LaTeX error ends with period, kpathsea doesn't - handle both
+    missing=$(echo "$output" | grep -oE "File \`[^']+\.(sty|cls|def|fd|bst)' not found\.?" | \
+        sed "s/File \`//;s/' not found\.*//" | sort -u)
+
+    # Pattern 2: I can't find file `xxx' (fonts - from mktextfm errors)
+    missing_fonts=$(echo "$output" | grep -oE "I can't find file \`[^']+'" | \
+        sed "s/I can't find file \`//;s/'$//" | sort -u)
+
+    # Combine missing files
+    if [ -n "$missing_fonts" ]; then
+        missing="$missing $missing_fonts"
+    fi
 
     # If no missing files or command succeeded, we're done
     if [ -z "$missing" ] || [ $exit_code -eq 0 ]; then
@@ -31,6 +42,12 @@ while [ $retry -lt $MAX_RETRIES ]; do
             installed=1
         fi
     done
+
+    # If we installed anything, update the TeX file database
+    if [ $installed -eq 1 ]; then
+        echo "[auto-install] Updating TeX file database..." >&2
+        mktexlsr 2>&1 >&2
+    fi
 
     # If we couldn't install anything, give up
     [ $installed -eq 0 ] && { echo "$output"; exit $exit_code; }
