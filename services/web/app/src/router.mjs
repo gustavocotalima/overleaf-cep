@@ -26,6 +26,7 @@ import TutorialController from './Features/Tutorial/TutorialController.mjs'
 import DocumentController from './Features/Documents/DocumentController.mjs'
 import CompileManager from './Features/Compile/CompileManager.mjs'
 import CompileController from './Features/Compile/CompileController.mjs'
+import PackageController from './Features/PackageManager/PackageController.mjs'
 import HealthCheckController from './Features/HealthCheck/HealthCheckController.mjs'
 import ProjectDownloadsController from './Features/Downloads/ProjectDownloadsController.mjs'
 import FileStoreController from './Features/FileStore/FileStoreController.mjs'
@@ -137,6 +138,10 @@ const rateLimiters = {
   indexAllProjectReferences: new RateLimiter('index-all-project-references', {
     points: 30,
     duration: 60,
+  }),
+  installPackage: new RateLimiter('install-package', {
+    points: 20,
+    duration: 60 * 60, // 20 packages per hour per project
   }),
   miscOutputDownload: new RateLimiter('misc-output-download', {
     points: 1000,
@@ -601,6 +606,22 @@ async function initialize(webRouter, privateApiRouter, publicApiRouter) {
     '/project/:Project_id/compile/stop',
     AuthorizationMiddleware.ensureUserCanReadProject,
     CompileController.stopCompile
+  )
+
+  // Package management routes
+  webRouter.post(
+    '/project/:Project_id/package/install',
+    RateLimiterMiddleware.rateLimit(rateLimiters.installPackage, {
+      params: ['Project_id'],
+    }),
+    AuthorizationMiddleware.ensureUserCanReadProject,
+    PackageController.installPackage
+  )
+
+  webRouter.get(
+    '/project/:Project_id/package/search',
+    AuthorizationMiddleware.ensureUserCanReadProject,
+    PackageController.searchPackages
   )
 
   webRouter.get(

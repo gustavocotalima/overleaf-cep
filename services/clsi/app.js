@@ -17,6 +17,10 @@ import OutputCacheManager from './app/js/OutputCacheManager.js'
 import express from 'express'
 import bodyParser from 'body-parser'
 
+import { createRequire } from 'node:module'
+const require = createRequire(import.meta.url)
+const PackageController = require('./app/js/PackageController')
+
 import net from 'node:net'
 import os from 'node:os'
 import OError from '@overleaf/o-error'
@@ -134,6 +138,10 @@ if (process.env.NODE_ENV === 'development' && global.__coverage__) {
     res.json({ coverage })
   })
 }
+
+// Package management routes
+app.post('/packages/install', bodyParser.json(), PackageController.installPackage)
+app.get('/packages/search', PackageController.searchPackage)
 
 app.get('/status', (req, res, next) => res.send('CLSI is alive\n'))
 
