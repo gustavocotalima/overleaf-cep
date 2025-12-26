@@ -13,14 +13,23 @@ while [ $retry -lt $MAX_RETRIES ]; do
     # Look for missing file patterns in LaTeX output
     # Pattern 1: File `xxx.sty' not found (packages, classes, definitions)
     # Note: LaTeX error ends with period, kpathsea doesn't - handle both
-    missing=$(echo "$output" | grep -oE "File \`[^']+\.(sty|cls|def|fd|bst)' not found\.?" | \
+    # Extensions: sty (styles), cls (classes), def (definitions), fd (font defs),
+    #             bst (bibtex styles), bbx (biblatex bib styles), cbx (biblatex cite styles)
+    missing=$(echo "$output" | grep -oE "File \`[^']+\.(sty|cls|def|fd|bst|bbx|cbx)' not found\.?" | \
         sed "s/File \`//;s/' not found\.*//" | sort -u)
 
-    # Pattern 2: I can't find file `xxx' (fonts - from mktextfm errors)
+    # Pattern 2: biblatex style errors: "... file 'xxx.bbx' not found"
+    missing_biblatex=$(echo "$output" | grep -oE "\.\.\. file '[^']+\.(bbx|cbx)' not found" | \
+        sed "s/\.\.\. file '//;s/' not found//" | sort -u)
+
+    # Pattern 3: I can't find file `xxx' (fonts - from mktextfm errors)
     missing_fonts=$(echo "$output" | grep -oE "I can't find file \`[^']+'" | \
         sed "s/I can't find file \`//;s/'$//" | sort -u)
 
     # Combine missing files
+    if [ -n "$missing_biblatex" ]; then
+        missing="$missing $missing_biblatex"
+    fi
     if [ -n "$missing_fonts" ]; then
         missing="$missing $missing_fonts"
     fi
