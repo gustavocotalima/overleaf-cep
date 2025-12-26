@@ -32,7 +32,7 @@ export default function InstallPackageModal({
   handleClose,
 }: InstallPackageModalProps) {
   const { t } = useTranslation()
-  const { _id: projectId } = useProjectContext()
+  const { projectId } = useProjectContext()
 
   const [packageName, setPackageName] = useState('')
   const [inFlight, setInFlight] = useState(false)
