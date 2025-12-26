@@ -6,6 +6,7 @@ import { UserGoogleDriveAuth } from './UserGoogleDriveAuth.js'
 const SCOPES = [
   'https://www.googleapis.com/auth/drive.file',
   'https://www.googleapis.com/auth/drive.readonly',
+  'https://www.googleapis.com/auth/userinfo.email',
 ]
 
 class GoogleDriveClient {
@@ -36,12 +37,15 @@ class GoogleDriveClient {
   }
 
   async handleCallback(code, userId) {
-    const oauth2Client = this._getOAuth2Client()
-    const { tokens } = await oauth2Client.getToken(code)
+    // Create a fresh OAuth2 client for callback handling to avoid shared state issues
+    const { clientId, clientSecret, redirectUri } = Settings.googleDriveBackup || {}
+    const callbackClient = new google.auth.OAuth2(clientId, clientSecret, redirectUri)
 
-    // Get user's Google email
-    oauth2Client.setCredentials(tokens)
-    const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client })
+    const { tokens } = await callbackClient.getToken(code)
+
+    // Get user's Google email using the authenticated client
+    callbackClient.setCredentials(tokens)
+    const oauth2 = google.oauth2({ version: 'v2', auth: callbackClient })
     const userInfo = await oauth2.userinfo.get()
     const email = userInfo.data.email
 
