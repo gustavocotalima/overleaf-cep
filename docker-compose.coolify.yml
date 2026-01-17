@@ -1,5 +1,5 @@
 networks:
-  no08kwcowc0kow44oo8oc0og:
+  coolify:
     external: true
 
 services:
@@ -28,8 +28,8 @@ services:
       EMAIL_CONFIRMATION_DISABLED: 'true'
       AUTO_INSTALL_PACKAGES: 'true'
     networks:
-      no08kwcowc0kow44oo8oc0og:
-        ipv4_address: 172.26.0.4
+      coolify:
+        ipv4_address: 172.19.0.104
 
   mongo:
     restart: always
@@ -47,7 +47,7 @@ services:
       timeout: 10s
       retries: 5
     networks:
-      - no08kwcowc0kow44oo8oc0og
+      - coolify
 
   redis:
     restart: always
@@ -55,7 +55,7 @@ services:
     volumes:
       - redis-data:/data
     networks:
-      - no08kwcowc0kow44oo8oc0og
+      - coolify
 
 volumes:
   overleaf-data:
