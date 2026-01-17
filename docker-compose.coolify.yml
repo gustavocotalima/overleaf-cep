@@ -1,3 +1,7 @@
+networks:
+  no08kwcowc0kow44oo8oc0og:
+    external: true
+
 services:
   overleaf:
     restart: always
@@ -22,6 +26,10 @@ services:
       ENABLED_LINKED_FILE_TYPES: 'project_file,project_output_file'
       ENABLE_CONVERSIONS: 'true'
       EMAIL_CONFIRMATION_DISABLED: 'true'
+      AUTO_INSTALL_PACKAGES: 'true'
+    networks:
+      no08kwcowc0kow44oo8oc0og:
+        ipv4_address: 172.26.0.4
 
   mongo:
     restart: always
@@ -38,12 +46,16 @@ services:
       interval: 10s
       timeout: 10s
       retries: 5
+    networks:
+      - no08kwcowc0kow44oo8oc0og
 
   redis:
     restart: always
     image: redis:6.2
     volumes:
       - redis-data:/data
+    networks:
+      - no08kwcowc0kow44oo8oc0og
 
 volumes:
   overleaf-data:
