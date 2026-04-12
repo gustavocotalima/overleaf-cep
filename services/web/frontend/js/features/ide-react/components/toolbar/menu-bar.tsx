@@ -8,7 +8,7 @@ import { MenuBarDropdown } from '@/shared/components/menu-bar/menu-bar-dropdown'
 import { MenuBarOption } from '@/shared/components/menu-bar/menu-bar-option'
 import { useTranslation } from 'react-i18next'
 import ChangeLayoutOptions from './change-layout-options'
-import { ElementType, useCallback, useMemo, useState } from 'react'
+import { ElementType, lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useLayoutContext } from '@/shared/context/layout-context'
 import { useCommandProvider } from '@/features/ide-react/hooks/use-command-provider'
 import CommandDropdown, {
@@ -23,7 +23,19 @@ import { useDetachCompileContext as useCompileContext } from '@/shared/context/d
 import { useProjectSettingsContext } from '@/features/editor-left-menu/context/project-settings-context'
 import getMeta from '@/utils/meta'
 import EditorCloneProjectModalWrapper from '@/features/clone-project-modal/components/editor-clone-project-modal-wrapper'
+import InstallPackageModal from '@/features/package-manager/components/install-package-modal'
+import { getJSON } from '@/infrastructure/fetch-json'
+import { useProjectContext } from '@/shared/context/project-context'
 import useOpenProject from '@/shared/hooks/use-open-project'
+
+const GoogleDriveExportModal = lazy(
+  () =>
+    import('@/features/google-drive/components/google-drive-export-modal')
+)
+const GoogleDriveImportModal = lazy(
+  () =>
+    import('@/features/google-drive/components/google-drive-import-modal')
+)
 import importOverleafModules from '../../../../../macros/import-overleaf-module.macro'
 
 const menubarExtraComponents = importOverleafModules(
@@ -40,11 +52,39 @@ export const ToolbarMenuBar = () => {
   const wordCountEnabled = pdfUrl || isSplitTestEnabled('word-count-client')
   const [showWordCountModal, setShowWordCountModal] = useState(false)
   const [showCloneProjectModal, setShowCloneProjectModal] = useState(false)
+  const [showInstallPackageModal, setShowInstallPackageModal] = useState(false)
+  const [showGDriveExportModal, setShowGDriveExportModal] = useState(false)
+  const [showGDriveImportModal, setShowGDriveImportModal] = useState(false)
+  const [gDriveConnected, setGDriveConnected] = useState(false)
   const openProject = useOpenProject()
+  const { _id: projectId, name: projectName } = useProjectContext()
 
   const anonymous = getMeta('ol-anonymous')
   const showSupport = getMeta('ol-showSupport')
   const showDocumentation = getMeta('ol-wikiEnabled')
+  const googleDriveEnabled = getMeta('ol-googleDriveEnabled') as boolean
+
+  // Check Google Drive connection status
+  useEffect(() => {
+    if (!googleDriveEnabled || anonymous) return
+    getJSON('/user/google-drive/status')
+      .then((status: any) => setGDriveConnected(status?.connected ?? false))
+      .catch(() => setGDriveConnected(false))
+  }, [googleDriveEnabled, anonymous])
+
+  // Handle Google Drive OAuth return
+  useEffect(() => {
+    if (!gDriveConnected) return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('open-export') === 'true') {
+      setShowGDriveExportModal(true)
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+    if (params.get('open-import') === 'true') {
+      setShowGDriveImportModal(true)
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [gDriveConnected])
 
   useCommandProvider(
     () => [
@@ -74,8 +114,53 @@ export const ToolbarMenuBar = () => {
         },
         id: 'copy_project',
       },
+      {
+        type: 'command',
+        label: t('install_package'),
+        disabled: anonymous,
+        handler: () => {
+          setShowInstallPackageModal(true)
+        },
+        id: 'install_package',
+      },
+      ...(googleDriveEnabled
+        ? [
+            {
+              type: 'command' as const,
+              label: t('export_to_google_drive'),
+              disabled: anonymous,
+              handler: () => {
+                if (!gDriveConnected) {
+                  const returnTo = encodeURIComponent(
+                    window.location.pathname + '?open-export=true'
+                  )
+                  window.location.href = `/user/google-drive/connect?returnTo=${returnTo}`
+                  return
+                }
+                setShowGDriveExportModal(true)
+              },
+              id: 'export_to_google_drive',
+            },
+            {
+              type: 'command' as const,
+              label: t('import_from_google_drive'),
+              disabled: anonymous,
+              handler: () => {
+                if (!gDriveConnected) {
+                  const returnTo = encodeURIComponent(
+                    window.location.pathname + '?open-import=true'
+                  )
+                  window.location.href = `/user/google-drive/connect?returnTo=${returnTo}`
+                  return
+                }
+                setShowGDriveImportModal(true)
+              },
+              id: 'import_from_google_drive',
+            },
+          ]
+        : []),
     ],
-    [t, setView, view, wordCountEnabled, anonymous]
+    [t, setView, view, wordCountEnabled, anonymous, googleDriveEnabled, gDriveConnected]
   )
   const fileMenuStructure: MenuStructure = useMemo(
     () => [
@@ -83,18 +168,32 @@ export const ToolbarMenuBar = () => {
         id: 'file-file-tree',
         children: ['new_file', 'new_folder', 'upload_file', 'copy_project'],
       },
-      { id: 'file-tools', children: ['show_version_history', 'word_count'] },
+      {
+        id: 'file-tools',
+        children: ['show_version_history', 'word_count', 'install_package'],
+      },
       { id: 'submit', children: ['submit-project', 'manage-template'] },
       {
         id: 'file-download',
         children: ['download-as-source-zip', 'download-pdf'],
       },
+      ...(googleDriveEnabled
+        ? [
+            {
+              id: 'google-drive',
+              children: [
+                'export_to_google_drive',
+                'import_from_google_drive',
+              ],
+            },
+          ]
+        : []),
       {
         id: 'settings',
         children: ['open-settings'],
       },
     ],
-    []
+    [googleDriveEnabled]
   )
 
   const editMenuStructure: MenuStructure = useMemo(
@@ -298,6 +397,24 @@ export const ToolbarMenuBar = () => {
         handleHide={() => setShowCloneProjectModal(false)}
         openProject={openProject}
       />
+      <InstallPackageModal
+        isOpen={showInstallPackageModal}
+        handleClose={() => setShowInstallPackageModal(false)}
+      />
+      <Suspense fallback={null}>
+        {showGDriveExportModal && (
+          <GoogleDriveExportModal
+            projectId={projectId}
+            projectName={projectName}
+            onClose={() => setShowGDriveExportModal(false)}
+          />
+        )}
+        {showGDriveImportModal && (
+          <GoogleDriveImportModal
+            onClose={() => setShowGDriveImportModal(false)}
+          />
+        )}
+      </Suspense>
       {menubarExtraComponents.map(
         ({ import: { default: Component } }, index) => (
           <Component key={index} />
