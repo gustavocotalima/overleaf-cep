@@ -70,16 +70,24 @@ function installPackage(req, res) {
     } else {
       logger.warn({ packageName, code, stderr, stdout }, 'Package installation failed')
 
+      const combinedOutput = stderr + '\n' + stdout
+
       // Check if package doesn't exist
-      if (stderr.includes('not found in package repositories') ||
-          stdout.includes('not found in package repositories')) {
+      if (combinedOutput.includes('not found in package repositories')) {
         res.status(404).json({
           error: `Package '${packageName}' not found in TeX Live repositories`,
           output: stderr || stdout,
         })
+      } else if (combinedOutput.includes('repository setting') ||
+                 combinedOutput.includes('tlmgr: No default repository') ||
+                 combinedOutput.includes('TLPDB')) {
+        res.status(500).json({
+          error: 'TeX Live repository not configured. Set TEXLIVE_REPOSITORY env var or run: tlmgr option repository https://mirror.ctan.org/systems/texlive/tlnet',
+          output: stderr || stdout,
+        })
       } else {
         res.status(500).json({
-          error: 'Package installation failed',
+          error: `Package installation failed: ${(stderr || stdout).substring(0, 200)}`,
           output: stderr || stdout,
         })
       }
