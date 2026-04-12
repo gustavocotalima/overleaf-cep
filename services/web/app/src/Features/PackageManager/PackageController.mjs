@@ -1,6 +1,6 @@
 import PackageManager from './PackageManager.mjs'
 import logger from '@overleaf/logger'
-import SessionManager from '../Authentication/SessionManager.js'
+import SessionManager from '../Authentication/SessionManager.mjs'
 import { expressify } from '@overleaf/promise-utils'
 
 // Validate package name - only allow safe characters
