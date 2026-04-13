@@ -1,7 +1,8 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { getJSON } from '@/infrastructure/fetch-json'
-import OLModal, {
+import { getJSON, postJSON } from '@/infrastructure/fetch-json'
+import {
+  OLModal,
   OLModalBody,
   OLModalFooter,
   OLModalHeader,
@@ -33,6 +34,46 @@ export default function GoogleDriveFolderPicker({ onSelect, onCancel }: Props) {
   const [path, setPath] = useState<PathItem[]>([{ id: 'root', name: 'My Drive' }])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showNewFolder, setShowNewFolder] = useState(false)
+  const [newFolderName, setNewFolderName] = useState('')
+  const [creatingFolder, setCreatingFolder] = useState(false)
+  const newFolderInputRef = useRef<HTMLInputElement>(null)
+
+  const handleCreateFolder = useCallback(async () => {
+    if (!newFolderName.trim()) return
+    setCreatingFolder(true)
+    try {
+      await postJSON('/user/google-drive/folders', {
+        body: { name: newFolderName.trim(), parentId: currentFolderId },
+      })
+      setNewFolderName('')
+      setShowNewFolder(false)
+      // Refresh the folder list
+      setCurrentFolderId(prev => {
+        // Force re-fetch by toggling - useEffect depends on currentFolderId
+        return prev
+      })
+      // Trigger reload by updating a counter
+      setLoading(true)
+      const response = await getJSON(
+        `/user/google-drive/folders?parentId=${currentFolderId}`
+      )
+      const data = response as { folders: Folder[]; path: PathItem[] }
+      setFolders(data.folders || [])
+      setPath(data.path || [{ id: 'root', name: 'My Drive' }])
+      setLoading(false)
+    } catch (err: any) {
+      setError(err.message || 'Failed to create folder')
+    } finally {
+      setCreatingFolder(false)
+    }
+  }, [newFolderName, currentFolderId])
+
+  useEffect(() => {
+    if (showNewFolder && newFolderInputRef.current) {
+      newFolderInputRef.current.focus()
+    }
+  }, [showNewFolder])
 
   useEffect(() => {
     async function loadFolders() {
@@ -102,6 +143,52 @@ export default function GoogleDriveFolderPicker({ onSelect, onCancel }: Props) {
             ))}
           </ol>
         </nav>
+
+        {/* New folder */}
+        {showNewFolder ? (
+          <div className="d-flex gap-2 mb-3">
+            <input
+              ref={newFolderInputRef}
+              type="text"
+              className="form-control"
+              placeholder="Folder name"
+              value={newFolderName}
+              onChange={e => setNewFolderName(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') handleCreateFolder()
+                if (e.key === 'Escape') setShowNewFolder(false)
+              }}
+              disabled={creatingFolder}
+            />
+            <OLButton
+              variant="primary"
+              size="sm"
+              onClick={handleCreateFolder}
+              disabled={creatingFolder || !newFolderName.trim()}
+            >
+              {creatingFolder ? 'Creating...' : 'Create'}
+            </OLButton>
+            <OLButton
+              variant="secondary"
+              size="sm"
+              onClick={() => { setShowNewFolder(false); setNewFolderName('') }}
+              disabled={creatingFolder}
+            >
+              {t('cancel')}
+            </OLButton>
+          </div>
+        ) : (
+          <div className="mb-3">
+            <OLButton
+              variant="secondary"
+              size="sm"
+              onClick={() => setShowNewFolder(true)}
+            >
+              <MaterialIcon type="create_new_folder" className="me-1" />
+              New Folder
+            </OLButton>
+          </div>
+        )}
 
         {/* Folder list */}
         <div

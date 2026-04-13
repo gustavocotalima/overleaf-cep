@@ -30,7 +30,7 @@ services:
       AUTO_INSTALL_PACKAGES: 'true'
     networks:
       coolify:
-        ipv4_address: 172.19.0.105
+        ipv4_address: 172.19.0.104
 
   mongo:
     restart: always

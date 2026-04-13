@@ -19,7 +19,7 @@ import bodyParser from 'body-parser'
 
 import { createRequire } from 'node:module'
 const require = createRequire(import.meta.url)
-const PackageController = require('./app/js/PackageController')
+const PackageController = require('./app/js/PackageController.cjs')
 
 import net from 'node:net'
 import os from 'node:os'

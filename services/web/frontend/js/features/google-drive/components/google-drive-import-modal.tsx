@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { postJSON, getJSON } from '@/infrastructure/fetch-json'
-import OLModal, {
+import {
+  OLModal,
   OLModalBody,
   OLModalFooter,
   OLModalHeader,
@@ -21,8 +22,22 @@ type DriveFile = {
   modifiedTime: string
 }
 
+type DriveFolder = {
+  id: string
+  name: string
+}
+
+type PathItem = {
+  id: string
+  name: string
+}
+
+type ImportMode = 'current' | 'new'
+
 type Props = {
   onClose: () => void
+  projectId?: string
+  projectName?: string
 }
 
 function formatFileSize(bytes: number): string {
@@ -35,13 +50,32 @@ function formatDate(dateString: string): string {
   return new Date(dateString).toLocaleDateString()
 }
 
-export default function GoogleDriveImportModal({ onClose }: Props) {
+export default function GoogleDriveImportModal({
+  onClose,
+  projectId,
+  projectName: currentProjectName,
+}: Props) {
   const { t } = useTranslation()
 
+  // Folder navigation state
+  const [currentFolderId, setCurrentFolderId] = useState('root')
+  const [folders, setFolders] = useState<DriveFolder[]>([])
+  const [path, setPath] = useState<PathItem[]>([
+    { id: 'root', name: 'My Drive' },
+  ])
+
+  // File state
   const [files, setFiles] = useState<DriveFile[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedFile, setSelectedFile] = useState<DriveFile | null>(null)
-  const [projectName, setProjectName] = useState('')
+  const [newProjectName, setNewProjectName] = useState('')
+
+  // Import mode
+  const [importMode, setImportMode] = useState<ImportMode>(
+    projectId ? 'current' : 'new'
+  )
+
+  // UI state
   const [loading, setLoading] = useState(true)
   const [importing, setImporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -50,18 +84,42 @@ export default function GoogleDriveImportModal({ onClose }: Props) {
     projectName: string
   } | null>(null)
 
+  const isSearching = searchQuery.trim().length > 0
+
+  // Fetch folders and files
   useEffect(() => {
-    async function loadFiles() {
+    async function loadContent() {
       setLoading(true)
       setError(null)
 
       try {
-        const params = searchQuery
-          ? `?search=${encodeURIComponent(searchQuery)}`
-          : ''
-        const response = await getJSON(`/user/google-drive/files${params}`)
-        const data = response as { files: DriveFile[] }
-        setFiles(data.files || [])
+        if (isSearching) {
+          // Search mode: flat file list
+          const response = await getJSON(
+            `/user/google-drive/files?search=${encodeURIComponent(searchQuery)}`
+          )
+          const data = response as { files: DriveFile[] }
+          setFiles(data.files || [])
+          setFolders([])
+        } else {
+          // Browse mode: folders + files in current folder
+          const [foldersRes, filesRes] = await Promise.all([
+            getJSON(
+              `/user/google-drive/folders?parentId=${currentFolderId}`
+            ),
+            getJSON(
+              `/user/google-drive/files?folderId=${currentFolderId}`
+            ),
+          ])
+          const fData = foldersRes as {
+            folders: DriveFolder[]
+            path: PathItem[]
+          }
+          const fileData = filesRes as { files: DriveFile[] }
+          setFolders(fData.folders || [])
+          setPath(fData.path || [{ id: 'root', name: 'My Drive' }])
+          setFiles(fileData.files || [])
+        }
       } catch (err: any) {
         setError(err.message || 'Failed to load files')
       } finally {
@@ -69,14 +127,23 @@ export default function GoogleDriveImportModal({ onClose }: Props) {
       }
     }
 
-    const debounceTimer = setTimeout(loadFiles, 300)
+    const debounceTimer = setTimeout(loadContent, isSearching ? 300 : 0)
     return () => clearTimeout(debounceTimer)
-  }, [searchQuery])
+  }, [searchQuery, currentFolderId, isSearching])
+
+  const handleFolderClick = useCallback((folder: DriveFolder) => {
+    setCurrentFolderId(folder.id)
+    setSearchQuery('')
+  }, [])
+
+  const handlePathClick = useCallback((pathItem: PathItem) => {
+    setCurrentFolderId(pathItem.id)
+    setSearchQuery('')
+  }, [])
 
   const handleFileSelect = useCallback((file: DriveFile) => {
     setSelectedFile(file)
-    // Set default project name from filename (without .zip)
-    setProjectName(file.name.replace(/\.zip$/i, ''))
+    setNewProjectName(file.name.replace(/\.zip$/i, ''))
   }, [])
 
   const handleImport = useCallback(async () => {
@@ -86,22 +153,37 @@ export default function GoogleDriveImportModal({ onClose }: Props) {
     setError(null)
 
     try {
-      const response = await postJSON('/project/google-drive/import', {
-        body: {
-          fileId: selectedFile.id,
-          projectName: projectName || selectedFile.name.replace(/\.zip$/i, ''),
-        },
-      })
-
-      setResult(response as { projectId: string; projectName: string })
+      if (importMode === 'current' && projectId) {
+        const response = await postJSON(
+          `/project/${projectId}/google-drive/import`,
+          { body: { fileId: selectedFile.id } }
+        )
+        setResult(response as { projectId: string; projectName: string })
+      } else {
+        const response = await postJSON('/project/google-drive/import', {
+          body: {
+            fileId: selectedFile.id,
+            projectName:
+              newProjectName || selectedFile.name.replace(/\.zip$/i, ''),
+          },
+        })
+        setResult(response as { projectId: string; projectName: string })
+      }
     } catch (err: any) {
       setError(err.message || 'Import failed')
     } finally {
       setImporting(false)
     }
-  }, [selectedFile, projectName])
+  }, [selectedFile, newProjectName, importMode, projectId])
 
+  // Success view
   if (result) {
+    const isCurrentProject = importMode === 'current'
+    if (isCurrentProject) {
+      // Overleaf auto-updates the editor, just close the modal
+      onClose()
+      return null
+    }
     return (
       <OLModal show onHide={onClose}>
         <OLModalHeader closeButton>
@@ -146,8 +228,36 @@ export default function GoogleDriveImportModal({ onClose }: Props) {
           <OLNotification type="error" content={error} className="mb-3" />
         )}
 
+        {/* Breadcrumb navigation */}
+        {!isSearching && (
+          <nav aria-label="breadcrumb" className="mb-2">
+            <ol className="breadcrumb">
+              {path.map((item, index) => (
+                <li
+                  key={item.id}
+                  className={`breadcrumb-item ${
+                    index === path.length - 1 ? 'active' : ''
+                  }`}
+                >
+                  {index === path.length - 1 ? (
+                    item.name
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn-link p-0"
+                      onClick={() => handlePathClick(item)}
+                    >
+                      {item.name}
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ol>
+          </nav>
+        )}
+
         {/* Search */}
-        <OLFormGroup>
+        <OLFormGroup className="mb-2">
           <OLFormControl
             type="text"
             placeholder={t('search_zip_files', {
@@ -160,7 +270,7 @@ export default function GoogleDriveImportModal({ onClose }: Props) {
           />
         </OLFormGroup>
 
-        {/* File list */}
+        {/* Folder + file list */}
         <div
           className="border rounded mb-3"
           style={{ minHeight: '250px', maxHeight: '350px', overflowY: 'auto' }}
@@ -171,21 +281,42 @@ export default function GoogleDriveImportModal({ onClose }: Props) {
                 <span className="visually-hidden">Loading...</span>
               </div>
             </div>
-          ) : files.length === 0 ? (
+          ) : folders.length === 0 && files.length === 0 ? (
             <div className="text-muted p-3 text-center">
-              {searchQuery
+              {isSearching
                 ? t('no_matching_files', {
                     defaultValue: 'No matching ZIP files found',
                   })
-                : t('no_zip_files', {
-                    defaultValue: 'No ZIP files found in your Google Drive',
+                : t('no_files_here', {
+                    defaultValue: 'No folders or ZIP files here',
                   })}
             </div>
           ) : (
             <ul className="list-group list-group-flush">
+              {/* Folders */}
+              {folders.map(folder => (
+                <li
+                  key={`folder-${folder.id}`}
+                  className="list-group-item list-group-item-action d-flex align-items-center"
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => handleFolderClick(folder)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') handleFolderClick(folder)
+                  }}
+                  tabIndex={0}
+                  role="button"
+                >
+                  <MaterialIcon
+                    type="folder"
+                    className="me-2 text-warning"
+                  />
+                  <div className="flex-grow-1">{folder.name}</div>
+                </li>
+              ))}
+              {/* Files */}
               {files.map(file => (
                 <li
-                  key={file.id}
+                  key={`file-${file.id}`}
                   className={`list-group-item list-group-item-action d-flex align-items-center ${
                     selectedFile?.id === file.id ? 'active' : ''
                   }`}
@@ -207,7 +338,8 @@ export default function GoogleDriveImportModal({ onClose }: Props) {
                           : 'text-muted'
                       }
                     >
-                      {formatFileSize(file.size)} • {formatDate(file.modifiedTime)}
+                      {formatFileSize(file.size)} •{' '}
+                      {formatDate(file.modifiedTime)}
                     </small>
                   </div>
                 </li>
@@ -216,18 +348,60 @@ export default function GoogleDriveImportModal({ onClose }: Props) {
           )}
         </div>
 
-        {/* Project name input (shown when file is selected) */}
-        {selectedFile && (
+        {/* Import mode selection */}
+        {selectedFile && projectId && (
+          <OLFormGroup className="mb-3">
+            <OLFormLabel>
+              {t('import_mode', { defaultValue: 'Import mode' })}
+            </OLFormLabel>
+            <div className="form-check">
+              <input
+                className="form-check-input"
+                type="radio"
+                name="importMode"
+                id="import-mode-current"
+                checked={importMode === 'current'}
+                onChange={() => setImportMode('current')}
+              />
+              <label
+                className="form-check-label"
+                htmlFor="import-mode-current"
+              >
+                Replace files in current project ({currentProjectName})
+              </label>
+              <div className="form-text text-warning">
+                This will replace all matching files in the current project
+                with contents from the ZIP.
+              </div>
+            </div>
+            <div className="form-check mt-2">
+              <input
+                className="form-check-input"
+                type="radio"
+                name="importMode"
+                id="import-mode-new"
+                checked={importMode === 'new'}
+                onChange={() => setImportMode('new')}
+              />
+              <label className="form-check-label" htmlFor="import-mode-new">
+                Create new project
+              </label>
+            </div>
+          </OLFormGroup>
+        )}
+
+        {/* Project name (only for new project mode) */}
+        {selectedFile && importMode === 'new' && (
           <OLFormGroup>
             <OLFormLabel htmlFor="projectName">
-              {t('project_name', { defaultValue: 'Project Name' })}
+              {t('project_name', { defaultValue: 'Project name' })}
             </OLFormLabel>
             <OLFormControl
               id="projectName"
               type="text"
-              value={projectName}
+              value={newProjectName}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                setProjectName(e.target.value)
+                setNewProjectName(e.target.value)
               }
               disabled={importing}
             />
@@ -246,7 +420,9 @@ export default function GoogleDriveImportModal({ onClose }: Props) {
         >
           {importing
             ? t('importing', { defaultValue: 'Importing...' })
-            : t('import', { defaultValue: 'Import' })}
+            : importMode === 'current'
+              ? t('replace_files', { defaultValue: 'Replace Files' })
+              : t('import', { defaultValue: 'Import' })}
         </OLButton>
       </OLModalFooter>
     </OLModal>

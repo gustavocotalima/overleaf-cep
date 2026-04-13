@@ -2,7 +2,8 @@ import { useState, useCallback, useEffect, lazy, Suspense } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getJSON } from '@/infrastructure/fetch-json'
 import { useProjectContext } from '@/shared/context/project-context'
-import OLModal, {
+import {
+  OLModal,
   OLModalBody,
   OLModalFooter,
   OLModalHeader,
@@ -43,7 +44,7 @@ export default function GoogleDriveExportWarning() {
 
 function GoogleDriveExportWarningContent() {
   const { t } = useTranslation()
-  const { _id: projectId, name: projectName } = useProjectContext()
+  const { projectId, name: projectName } = useProjectContext()
 
   const [latestExport, setLatestExport] = useState<LatestExport | null>(null)
   const [showWarning, setShowWarning] = useState(false)
@@ -53,6 +54,8 @@ function GoogleDriveExportWarningContent() {
 
   // Check connection status and latest export on mount
   useEffect(() => {
+    if (!projectId) return
+
     async function checkStatus() {
       try {
         // First check if user is connected to Google Drive

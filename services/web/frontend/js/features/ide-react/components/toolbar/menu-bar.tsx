@@ -57,7 +57,7 @@ export const ToolbarMenuBar = () => {
   const [showGDriveImportModal, setShowGDriveImportModal] = useState(false)
   const [gDriveConnected, setGDriveConnected] = useState(false)
   const openProject = useOpenProject()
-  const { _id: projectId, name: projectName } = useProjectContext()
+  const { projectId, name: projectName } = useProjectContext()
 
   const anonymous = getMeta('ol-anonymous')
   const showSupport = getMeta('ol-showSupport')
@@ -411,6 +411,8 @@ export const ToolbarMenuBar = () => {
         )}
         {showGDriveImportModal && (
           <GoogleDriveImportModal
+            projectId={projectId}
+            projectName={projectName}
             onClose={() => setShowGDriveImportModal(false)}
           />
         )}

@@ -1,7 +1,7 @@
 import { google } from 'googleapis'
 import Settings from '@overleaf/settings'
 import logger from '@overleaf/logger'
-import { UserGoogleDriveAuth } from './UserGoogleDriveAuth.js'
+import { UserGoogleDriveAuth } from './UserGoogleDriveAuth.mjs'
 
 const SCOPES = [
   'https://www.googleapis.com/auth/drive.file',
@@ -146,6 +146,25 @@ class GoogleDriveClient {
     })
 
     return response.data.files || []
+  }
+
+  async createFolder(userId, name, parentId = 'root') {
+    const drive = await this._getDriveForUser(userId)
+
+    const fileMetadata = {
+      name,
+      mimeType: 'application/vnd.google-apps.folder',
+      parents: [parentId],
+    }
+
+    const response = await drive.files.create({
+      resource: fileMetadata,
+      fields: 'id, name',
+    })
+
+    logger.info({ userId, folderId: response.data.id, name, parentId }, 'Created folder in Google Drive')
+
+    return { id: response.data.id, name: response.data.name }
   }
 
   async listZipFiles(userId, folderId = 'root') {
