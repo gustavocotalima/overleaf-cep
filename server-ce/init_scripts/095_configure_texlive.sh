@@ -10,6 +10,12 @@ if [ -z "$TEXLIVE_VERSION" ]; then
   exit 0
 fi
 
+# Ensure TeX Live binaries are on the PATH (symlinks in /usr/local/bin)
+TLMGR=$(find /usr/local/texlive/"$TEXLIVE_VERSION"/bin -name tlmgr 2>/dev/null | head -1)
+if [ -n "$TLMGR" ]; then
+  "$TLMGR" path add 2>/dev/null || true
+fi
+
 # Use user-provided repo, or pick the right default based on whether
 # the installed version matches the current CTAN year
 if [ -n "$TEXLIVE_REPOSITORY" ]; then
