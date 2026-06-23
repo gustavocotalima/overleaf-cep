@@ -3,7 +3,7 @@
 # This ensures tlmgr can install packages via the UI and auto-install features
 
 # Detect installed TeX Live version
-TEXLIVE_VERSION=$(ls /usr/local/texlive/ 2>/dev/null | grep -E '^[0-9]{4}$' | head -1)
+TEXLIVE_VERSION=$(ls /usr/local/texlive/ 2>/dev/null | grep -E '^[0-9]{4}$' | sort -r | head -1)
 
 if [ -z "$TEXLIVE_VERSION" ]; then
   echo "No TeX Live installation found, skipping repository configuration"
@@ -24,7 +24,8 @@ else
   # Try the main CTAN mirror first; if it rejects us (version mismatch),
   # fall back to the historic frozen archive for our version
   TEXLIVE_REPO="https://mirror.ctan.org/systems/texlive/tlnet"
-  if ! tlmgr --repository "$TEXLIVE_REPO" option repository "$TEXLIVE_REPO" 2>&1 | grep -q "setting default"; then
+  TLMGR_REPO_CHECK_OUTPUT=$(tlmgr --repository "$TEXLIVE_REPO" option repository "$TEXLIVE_REPO" 2>&1) || true
+  if echo "$TLMGR_REPO_CHECK_OUTPUT" | grep -q "older than remote repository"; then
     TEXLIVE_REPO="https://ftp.math.utah.edu/pub/tex/historic/systems/texlive/${TEXLIVE_VERSION}/tlnet-final"
   fi
 fi

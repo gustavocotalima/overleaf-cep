@@ -169,21 +169,7 @@ function searchPackage(req, res) {
  * Create symlinks in /usr/local/bin for newly installed binaries
  */
 function createSymlinksForPackage(packageName) {
-  // Find the TeX Live bin directory
-  const texliveBinDirs = [
-    '/usr/local/texlive/2025/bin/aarch64-linux',
-    '/usr/local/texlive/2025/bin/x86_64-linux',
-    '/usr/local/texlive/2024/bin/aarch64-linux',
-    '/usr/local/texlive/2024/bin/x86_64-linux',
-  ]
-
-  let texliveBinDir = null
-  for (const dir of texliveBinDirs) {
-    if (fs.existsSync(dir)) {
-      texliveBinDir = dir
-      break
-    }
-  }
+  const texliveBinDir = findTexliveBinDir()
 
   if (!texliveBinDir) {
     logger.warn('Could not find TeX Live bin directory')
@@ -214,6 +200,45 @@ function createSymlinksForPackage(packageName) {
       }
     }
   }
+}
+
+function findTexliveBinDir() {
+  const texliveRoot = '/usr/local/texlive'
+  if (!fs.existsSync(texliveRoot)) {
+    return null
+  }
+
+  const preferredPlatform =
+    process.arch === 'arm64' ? 'aarch64-linux' : 'x86_64-linux'
+  const versions = fs
+    .readdirSync(texliveRoot, { withFileTypes: true })
+    .filter(entry => entry.isDirectory() && /^\d{4}$/.test(entry.name))
+    .map(entry => entry.name)
+    .sort()
+    .reverse()
+
+  for (const version of versions) {
+    const binRoot = Path.join(texliveRoot, version, 'bin')
+    if (!fs.existsSync(binRoot)) {
+      continue
+    }
+
+    const platforms = fs
+      .readdirSync(binRoot, { withFileTypes: true })
+      .filter(entry => entry.isDirectory())
+      .map(entry => entry.name)
+      .sort((a, b) => {
+        if (a === preferredPlatform) return -1
+        if (b === preferredPlatform) return 1
+        return a.localeCompare(b)
+      })
+
+    if (platforms.length > 0) {
+      return Path.join(binRoot, platforms[0])
+    }
+  }
+
+  return null
 }
 
 module.exports = {

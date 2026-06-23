@@ -18,7 +18,7 @@ services:
     stop_grace_period: 60s
     volumes:
       - overleaf-data:/var/lib/overleaf
-      - texlive-data:/usr/local/texlive
+      - texlive-2026-data:/usr/local/texlive
     environment:
       OVERLEAF_APP_NAME: Overleaf Community Edition
       OVERLEAF_MONGO_URL: mongodb://mongo/sharelatex
@@ -62,4 +62,4 @@ volumes:
   overleaf-data:
   mongo-data:
   redis-data:
-  texlive-data:
+  texlive-2026-data:
