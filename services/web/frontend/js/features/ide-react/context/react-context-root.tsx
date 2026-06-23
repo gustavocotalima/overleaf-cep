@@ -32,6 +32,7 @@ import { CommandRegistryProvider } from './command-registry-context'
 import { EditorSelectionProvider } from '@/shared/context/editor-selection-context'
 import importOverleafModules from '../../../../macros/import-overleaf-module.macro'
 import { TutorialProvider } from '@/shared/context/tutorial-context'
+import { TabsProvider } from './tabs-context'
 
 const rootContextProviders = importOverleafModules('rootContextProviders') as {
   import: { default: ElementType }
@@ -76,6 +77,7 @@ export const ReactContextRoot: FC<
     UserFeaturesProvider,
     EditorSelectionProvider,
     TutorialProvider,
+    TabsProvider,
     ...providers,
   }
 
@@ -101,9 +103,9 @@ export const ReactContextRoot: FC<
                 <Providers.UserProvider>
                   <Providers.SnapshotProvider>
                     <Providers.DetachProvider>
-                      <Providers.EditorPropertiesProvider>
+                      <Providers.EditorOpenDocProvider>
                         <Providers.EditorViewProvider>
-                          <Providers.EditorOpenDocProvider>
+                          <Providers.EditorPropertiesProvider>
                             <Providers.EditorProvider>
                               <Providers.TutorialProvider>
                                 <Providers.FileTreeDataProvider>
@@ -119,19 +121,21 @@ export const ReactContextRoot: FC<
                                                     <Providers.DetachCompileProvider>
                                                       <Providers.ChatProvider>
                                                         <Providers.FileTreeOpenProvider>
-                                                          <Providers.OnlineUsersProvider>
-                                                            <Providers.MetadataProvider>
-                                                              <Providers.OutlineProvider>
-                                                                <Providers.CommandRegistryProvider>
-                                                                  <Providers.EditorSelectionProvider>
-                                                                    {
-                                                                      childrenWrappedWithDynamicProviders
-                                                                    }
-                                                                  </Providers.EditorSelectionProvider>
-                                                                </Providers.CommandRegistryProvider>
-                                                              </Providers.OutlineProvider>
-                                                            </Providers.MetadataProvider>
-                                                          </Providers.OnlineUsersProvider>
+                                                          <Providers.TabsProvider>
+                                                            <Providers.OnlineUsersProvider>
+                                                              <Providers.MetadataProvider>
+                                                                <Providers.OutlineProvider>
+                                                                  <Providers.CommandRegistryProvider>
+                                                                    <Providers.EditorSelectionProvider>
+                                                                      {
+                                                                        childrenWrappedWithDynamicProviders
+                                                                      }
+                                                                    </Providers.EditorSelectionProvider>
+                                                                  </Providers.CommandRegistryProvider>
+                                                                </Providers.OutlineProvider>
+                                                              </Providers.MetadataProvider>
+                                                            </Providers.OnlineUsersProvider>
+                                                          </Providers.TabsProvider>
                                                         </Providers.FileTreeOpenProvider>
                                                       </Providers.ChatProvider>
                                                     </Providers.DetachCompileProvider>
@@ -147,9 +151,9 @@ export const ReactContextRoot: FC<
                                 </Providers.FileTreeDataProvider>
                               </Providers.TutorialProvider>
                             </Providers.EditorProvider>
-                          </Providers.EditorOpenDocProvider>
+                          </Providers.EditorPropertiesProvider>
                         </Providers.EditorViewProvider>
-                      </Providers.EditorPropertiesProvider>
+                      </Providers.EditorOpenDocProvider>
                     </Providers.DetachProvider>
                   </Providers.SnapshotProvider>
                 </Providers.UserProvider>

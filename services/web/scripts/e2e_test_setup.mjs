@@ -11,6 +11,7 @@ import UserDeleter from '../app/src/Features/User/UserDeleter.mjs'
 import UserRegistrationHandler from '../app/src/Features/User/UserRegistrationHandler.mjs'
 import HistoryManager from '../app/src/Features/History/HistoryManager.mjs'
 import ProjectCreationHandler from '../app/src/Features/Project/ProjectCreationHandler.mjs'
+import crypto from 'node:crypto'
 
 const MONOREPO = Path.dirname(
   Path.dirname(Path.dirname(Path.dirname(fileURLToPath(import.meta.url))))
@@ -24,17 +25,25 @@ async function createUser(email) {
   const user = await UserRegistrationHandler.promises.registerNewUser({
     email,
     password: process.env.CYPRESS_DEFAULT_PASSWORD,
+    analyticsId: crypto.randomUUID(),
   })
   const features = email.startsWith('free+')
     ? Settings.defaultFeatures
     : Settings.features.professional
+  const isAdmin = email.startsWith('admin+')
+  let adminRoles = []
+  if (email.startsWith('admin+finance')) {
+    adminRoles = ['finance']
+  } else if (isAdmin) {
+    adminRoles = ['engineering']
+  }
   await db.users.updateOne(
     { _id: user._id },
     {
       $set: {
         // Set admin flag.
-        isAdmin: email.startsWith('admin+'),
-        adminRoles: email.startsWith('admin+') ? ['engineering'] : [],
+        isAdmin,
+        adminRoles,
         // Disable spell-checking for performance and flakiness reasons.
         'ace.spellCheckLanguage': '',
         // Override features.
@@ -78,8 +87,10 @@ async function deleteUser(email) {
   await UserDeleter.promises.expireDeletedUser(user._id)
 }
 
-async function createProjectWithOldHistoryId(userId) {
-  const projectName = 'old history id'
+export async function createProjectWithOldHistoryId(
+  userId,
+  projectName = 'old history id'
+) {
   const historyId = parseInt(
     await HistoryManager.promises.initializeProject(),
     10
@@ -130,7 +141,7 @@ async function purgeNewUsers() {
   )
 }
 
-async function provisionSplitTests() {
+export async function provisionSplitTests(merge = false, extraSplitTests = []) {
   const backup = Path.join(
     MONOREPO,
     'backup',
@@ -150,12 +161,13 @@ async function provisionSplitTests() {
   // Imported from production via https://www.overleaf.com/admin/split-test -> "Copy all split tests" -> "Copy for E2E test setup"
   const SPLIT_TESTS = JSON.parse(
     await fs.promises.readFile(
-      Path.join(MONOREPO, 'tools/saas-e2e/split-tests.json')
+      Path.join(MONOREPO, 'tools/saas-e2e/split-tests.json'),
+      'utf-8'
     )
   )
   // Add WIP split test, we can update the JSON blob once this is in production
   SPLIT_TESTS.push({
-    name: 'compile-from-history',
+    name: 'zip-from-history',
     versions: [
       {
         versionNumber: 1,
@@ -174,7 +186,14 @@ async function provisionSplitTests() {
     ],
   })
   console.log(`> Importing ${SPLIT_TESTS.length} split-tests from production.`)
-  await SplitTestManager.replaceSplitTests(SPLIT_TESTS)
+  if (merge) {
+    await SplitTestManager.mergeSplitTests(SPLIT_TESTS, false)
+  } else {
+    await SplitTestManager.replaceSplitTests(SPLIT_TESTS)
+  }
+  if (extraSplitTests.length > 0) {
+    await SplitTestManager.mergeSplitTests(extraSplitTests, false)
+  }
 }
 
 async function checkNoTableScan() {
@@ -206,12 +225,7 @@ async function main() {
   await Promise.all([purgeNewUsers(), provisionUsers(), provisionSplitTests()])
 }
 
-await main()
-await GracefulShutdown.gracefulShutdown(
-  {
-    close(cb) {
-      cb()
-    },
-  },
-  'SIGTERM'
-)
+if (import.meta.main) {
+  await main()
+  await GracefulShutdown.gracefulShutdown()
+}

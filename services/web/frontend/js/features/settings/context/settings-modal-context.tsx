@@ -3,6 +3,7 @@ import { useLayoutContext } from '@/shared/context/layout-context'
 import AutoCloseBracketsSetting from '@/features/settings/components/editor-settings/auto-close-brackets-setting'
 import AutoCompleteSetting from '@/features/settings/components/editor-settings/auto-complete-setting'
 import CodeCheckSetting from '@/features/settings/components/editor-settings/code-check-setting'
+import PreviewTabsSetting from '@/features/settings/components/editor-settings/preview-tabs-setting'
 import KeybindingSetting from '@/features/settings/components/editor-settings/keybinding-setting'
 import PDFViewerSetting from '@/features/settings/components/editor-settings/pdf-viewer-setting'
 import importOverleafModules from '../../../../macros/import-overleaf-module.macro'
@@ -10,6 +11,7 @@ import SpellCheckSetting from '@/features/settings/components/editor-settings/sp
 import DictionarySetting from '@/features/settings/components/editor-settings/dictionary-setting'
 import { useTranslation } from 'react-i18next'
 import BreadcrumbsSetting from '@/features/settings/components/editor-settings/breadcrumbs-setting'
+import NonBlinkingCursorSetting from '@/features/settings/components/editor-settings/non-blinking-cursor-setting'
 import MathPreviewSetting from '@/features/settings/components/editor-settings/math-preview-setting'
 import RootDocumentSetting from '@/features/settings/components/compiler-settings/root-document-setting'
 import CompilerSetting from '@/features/settings/components/compiler-settings/compiler-setting'
@@ -22,7 +24,6 @@ import EditorThemeSetting from '@/features/settings/components/appearance-settin
 import FontSizeSetting from '@/features/settings/components/appearance-settings/font-size-setting'
 import LineHeightSetting from '@/features/settings/components/appearance-settings/line-height-setting'
 import FontFamilySetting from '@/features/settings/components/appearance-settings/font-family-setting'
-import { AvailableUnfilledIcon } from '@/shared/components/material-icon'
 import { EditorLeftMenuProvider } from '@/features/editor-left-menu/components/editor-left-menu-context'
 import DarkModePdfSetting from '@/features/settings/components/appearance-settings/dark-mode-pdf-setting'
 
@@ -30,41 +31,32 @@ import { useProjectSettingsContext } from '@/features/editor-left-menu/context/p
 import { useFeatureFlag } from '@/shared/context/split-test-context'
 import ProjectNotificationsSetting from '@/features/settings/components/editor-settings/project-notifications-setting'
 import getMeta from '@/utils/meta'
+import type {
+  SettingsEntry,
+  SettingsSection,
+  SettingsSectionHook,
+} from '@/features/settings/context/types'
+import EditorTabsSetting from '../components/editor-settings/editor-tabs-setting'
+import FloatingMenuSetting from '../components/editor-settings/floating-menu-setting'
 
 const [referenceSearchSettingModule] = importOverleafModules(
   'referenceSearchSetting'
 )
 const ReferenceSearchSetting = referenceSearchSettingModule?.import.default
 
-type Setting = {
-  key: string
-  component: React.ReactNode
-  hidden?: boolean
-}
+const editorTabExtraSectionHooks: SettingsSectionHook[] = importOverleafModules(
+  'settingsModalEditorTabSections'
+)
+  .map((m: any) => m?.import?.default)
+  .filter((h: unknown): h is SettingsSectionHook => typeof h === 'function')
 
-type SettingsSection = {
-  title?: string
-  key: string
-  settings: Setting[]
-}
+const spellcheckExtraSectionHooks: SettingsSectionHook[] =
+  importOverleafModules('settingsModalSpellcheckSections')
+    .map((m: any) => m?.import?.default)
+    .filter((h: unknown): h is SettingsSectionHook => typeof h === 'function')
 
-export type SettingsTab = {
-  key: string
-  icon: AvailableUnfilledIcon
-  sections: SettingsSection[]
-  title: string
-  hidden?: boolean
-}
-
-type SettingsLink = {
-  key: string
-  icon: AvailableUnfilledIcon
-  href: string
-  title: string
-  hidden?: boolean
-}
-
-export type SettingsEntry = SettingsLink | SettingsTab
+const useSlotSections = (hooks: SettingsSectionHook[]): SettingsSection[] =>
+  hooks.map(hook => hook()).filter((s): s is SettingsSection => s != null)
 
 type SettingsModalState = {
   show: boolean
@@ -84,12 +76,17 @@ export const SettingsModalProvider: FC<React.PropsWithChildren> = ({
 }) => {
   const { t } = useTranslation()
   const { isOverleaf } = getMeta('ol-ExposedSettings')
-  const { overallTheme } = useProjectSettingsContext()
+  const { overallTheme, floatingMenu } = useProjectSettingsContext()
 
   // TODO ide-redesign-cleanup: Rename this field and move it directly into this context
   const { leftMenuShown, setLeftMenuShown } = useLayoutContext()
 
   const hasEmailNotifications = useFeatureFlag('email-notifications')
+  const hasEditorTabs = useFeatureFlag('editor-tabs')
+  const hasToolbarMigration = useFeatureFlag('writefull-toolbar-migration')
+
+  const editorTabExtraSections = useSlotSections(editorTabExtraSectionHooks)
+  const spellcheckExtraSections = useSlotSections(spellcheckExtraSectionHooks)
 
   const allSettingsTabs: SettingsEntry[] = useMemo(
     () => [
@@ -110,8 +107,22 @@ export const SettingsModalProvider: FC<React.PropsWithChildren> = ({
                 component: <AutoCloseBracketsSetting />,
               },
               {
+                key: 'nonBlinkingCursor',
+                component: <NonBlinkingCursorSetting />,
+              },
+              {
                 key: 'syntaxValidation',
                 component: <CodeCheckSetting />,
+              },
+              {
+                key: 'editorTabs',
+                component: <EditorTabsSetting />,
+                hidden: !hasEditorTabs,
+              },
+              {
+                key: 'previewTabs',
+                component: <PreviewTabsSetting />,
+                hidden: !hasEditorTabs,
               },
               {
                 key: 'mode',
@@ -126,19 +137,10 @@ export const SettingsModalProvider: FC<React.PropsWithChildren> = ({
                 component: <ReferenceSearchSetting />,
                 hidden: !ReferenceSearchSetting,
               },
-            ],
-          },
-          {
-            key: 'spellcheck',
-            title: t('spellcheck'),
-            settings: [
               {
-                key: 'spellCheckLanguage',
-                component: <SpellCheckSetting />,
-              },
-              {
-                key: 'dictionary-settings',
-                component: <DictionarySetting />,
+                key: 'floating-menu',
+                component: <FloatingMenuSetting />,
+                hidden: !hasToolbarMigration && floatingMenu,
               },
             ],
           },
@@ -156,6 +158,29 @@ export const SettingsModalProvider: FC<React.PropsWithChildren> = ({
               },
             ],
           },
+          ...editorTabExtraSections,
+        ],
+      },
+      {
+        key: 'spelling_and_language',
+        title: t('spelling_and_language'),
+        icon: 'spellcheck',
+        sections: [
+          {
+            key: 'spellcheck',
+            title: t('spellcheck'),
+            settings: [
+              {
+                key: 'spellCheckLanguage',
+                component: <SpellCheckSetting />,
+              },
+              {
+                key: 'dictionary-settings',
+                component: <DictionarySetting />,
+              },
+            ],
+          },
+          ...spellcheckExtraSections,
         ],
       },
       {
@@ -264,7 +289,17 @@ export const SettingsModalProvider: FC<React.PropsWithChildren> = ({
         hidden: !isOverleaf,
       },
     ],
-    [t, overallTheme, hasEmailNotifications, isOverleaf]
+    [
+      t,
+      hasEditorTabs,
+      overallTheme,
+      hasEmailNotifications,
+      isOverleaf,
+      editorTabExtraSections,
+      spellcheckExtraSections,
+      hasToolbarMigration,
+      floatingMenu,
+    ]
   )
 
   const settingsTabs = useMemo(

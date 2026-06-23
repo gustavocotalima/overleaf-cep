@@ -21,6 +21,8 @@ const {
   hasAdminAccess,
   useAdminCapabilities,
   useHasAdminCapability,
+  useNonAdminDomainCapabilities,
+  useHasNonAdminDomainCapability,
 } = AdminAuthorizationHelper
 const IEEE_BRAND_ID = Settings.ieeeBrandId
 
@@ -166,7 +168,7 @@ export default async function (webRouter, privateApiRouter, publicApiRouter) {
       return chunks.map(chunk => staticFilesBase + chunk)
     }
 
-    res.locals.mathJaxPath = `/js/libs/mathjax-${PackageVersions.version.mathjax}/es5/tex-svg-full.js`
+    res.locals.mathJaxPath = `/js/libs/mathjax-${PackageVersions.version.mathjax}/tex-svg.js`
     res.locals.dictionariesRoot = `/js/dictionaries/${PackageVersions.version.dictionaries}/`
 
     res.locals.lib = PackageVersions.lib
@@ -279,8 +281,9 @@ export default async function (webRouter, privateApiRouter, publicApiRouter) {
   })
 
   webRouter.use(useAdminCapabilities)
-
   webRouter.use(useHasAdminCapability)
+  webRouter.use(useNonAdminDomainCapabilities)
+  webRouter.use(useHasNonAdminDomainCapability)
 
   webRouter.use(function (req, res, next) {
     // Clone the nav settings so they can be modified for each request
@@ -302,23 +305,20 @@ export default async function (webRouter, privateApiRouter, publicApiRouter) {
   })
 
   webRouter.use(function (req, res, next) {
-    // TODO
-    if (true) {
-      res.locals.overallThemes = [
-        {
-          name: 'Dark',
-          val: '',
-        },
-        {
-          name: 'Light',
-          val: 'light-',
-        },
-        {
-          name: 'System',
-          val: 'system',
-        },
-      ]
-    }
+    res.locals.overallThemes = [
+      {
+        name: 'Dark',
+        val: '',
+      },
+      {
+        name: 'Light',
+        val: 'light-',
+      },
+      {
+        name: 'System',
+        val: 'system',
+      },
+    ]
     next()
   })
 
@@ -417,6 +417,9 @@ export default async function (webRouter, privateApiRouter, publicApiRouter) {
       cioWriteKey: Settings.analytics?.cio?.writeKey,
       cioSiteId: Settings.analytics?.cio?.siteId,
       linkedInInsightsPartnerId: Settings.analytics?.linkedIn?.partnerId,
+      enablePandocConversions: Settings.enablePandocConversions,
+      mixpanelLabsToken:
+        Settings.labs?.enable && Settings.analytics?.mixpanel?.labsToken,
     }
     next()
   })

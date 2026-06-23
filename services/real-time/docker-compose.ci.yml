@@ -9,7 +9,7 @@ services:
     volumes:
       - ./reports:/overleaf/services/real-time/reports
       - ../../tsconfig.backend.json:/overleaf/tsconfig.backend.json
-    command: npm run test:unit:_run
+    command: yarn run test:unit:_run
     environment:
       CI:
       MONGO_CONNECTION_STRING: mongodb://mongo/test-overleaf
@@ -26,7 +26,6 @@ services:
         condition: service_healthy
 
   test_acceptance:
-    build: .
     image: ci/$PROJECT_NAME:$BRANCH_NAME-$BUILD_NUMBER
     environment:
       CI:
@@ -47,7 +46,7 @@ services:
       redis_test:
         condition: service_healthy
     user: node
-    command: npm run test:acceptance
+    command: yarn run test:acceptance
 
   tar:
     build: .
@@ -58,7 +57,7 @@ services:
     user: root
 
   redis_test:
-    image: redis:7.4.3
+    image: redis:7.4.8
     healthcheck:
       test: ping="$$(redis-cli ping)" && [ "$$ping" = 'PONG' ]
       interval: 1s

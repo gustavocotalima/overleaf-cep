@@ -16,6 +16,8 @@ import AnalyticsManager from '../Analytics/AnalyticsManager.mjs'
 import Queues from '../../infrastructure/Queues.mjs'
 import Modules from '../../infrastructure/Modules.mjs'
 import SubscriptionViewModelBuilder from './SubscriptionViewModelBuilder.mjs'
+import CustomerIoPlanHelpers from './CustomerIoPlanHelpers.mjs'
+import { GroupPolicy } from '../../models/GroupPolicy.mjs'
 import { AI_ADD_ON_CODE } from './AiHelper.mjs'
 import { fetchNothing } from '@overleaf/fetch-utils'
 import SplitTestHandler from '../SplitTests/SplitTestHandler.mjs'
@@ -37,19 +39,24 @@ function featuresEpochIsCurrent(user) {
 
 /**
  * Refresh features for the given user
+ * @param {string} userId
+ * @param {string} reason
  */
 async function refreshFeatures(userId, reason) {
   const user = await UserGetter.promises.getUser(userId, {
     _id: 1,
+    analyticsId: 1,
+    labsProgram: 1,
     features: 1,
+    email: 1,
   })
   const oldFeatures = _.clone(user.features)
   const features = await computeFeatures(userId)
   logger.debug({ userId, features, reason }, 'updating user features')
 
   const matchedFeatureSet = FeaturesHelper.getMatchedFeatureSet(features)
-  AnalyticsManager.setUserPropertyForUserInBackground(
-    userId,
+  AnalyticsManager.setUserPropertyForMongoUserInBackground(
+    user,
     'feature-set',
     matchedFeatureSet
   )
@@ -57,18 +64,12 @@ async function refreshFeatures(userId, reason) {
   const { features: newFeatures, featuresChanged } =
     await UserFeaturesUpdater.promises.updateFeatures(userId, features)
 
-  // TODO: this call is quite expensive, so ideally we'd update cio with something
-  // that doesn't require the best subscription to be computed, ie. the plan code (or type)
-  const bestSubscriptionType = await _getBestSubscriptionType(userId)
-
-  Modules.promises.hooks
-    .fire('setUserProperties', userId, {
-      features,
-      'best-subscription-type': bestSubscriptionType,
-    })
-    .catch(err => {
-      logger.error({ err, userId }, 'Failed to sync features to customer.io')
-    })
+  _updateCustomerIoSubscriptionProperties(user, features).catch(err => {
+    logger.warn(
+      { err, userId },
+      'Failed to update subscription properties in customer.io'
+    )
+  })
 
   if (oldFeatures.dropbox === true && features.dropbox === false) {
     logger.debug({ userId }, '[FeaturesUpdater] must unlink dropbox')
@@ -116,6 +117,7 @@ async function refreshFeatures(userId, reason) {
             userOverleafId: userId,
             // todo: quota clean-up: collab with writefull to rename this, and check if still needed
             hasAiAssist: hasPremiumAiFeatures,
+            aiUsageQuota: newFeatures.aiUsageQuota,
           },
           method: 'POST',
         }
@@ -131,20 +133,94 @@ async function refreshFeatures(userId, reason) {
   return { features: newFeatures, featuresChanged }
 }
 
-async function _getBestSubscriptionType(userId) {
-  try {
-    const { bestSubscription } =
-      await SubscriptionViewModelBuilder.promises.getUsersSubscriptionDetails({
-        _id: userId,
-      })
-    return bestSubscription?.type || 'free'
-  } catch (err) {
-    logger.warn(
-      { err, userId },
-      'Failed to calculate best-subscription-type for customer.io'
-    )
-    return 'free'
+async function _updateCustomerIoSubscriptionProperties(user, features) {
+  const userId = user._id
+  const {
+    bestSubscription,
+    individualSubscription,
+    memberGroupSubscriptions,
+    managedGroupSubscriptions,
+    currentInstitutionsWithLicence,
+  } = await SubscriptionViewModelBuilder.promises.getUsersSubscriptionDetails({
+    _id: userId,
+  })
+
+  const userIsMemberOfGroupSubscription =
+    memberGroupSubscriptions.length > 0 || managedGroupSubscriptions.length > 0
+  const hasCommons = (currentInstitutionsWithLicence?.length ?? 0) > 0
+
+  let individualPaymentRecord = null
+  if (individualSubscription && !individualSubscription.groupPlan) {
+    try {
+      ;[individualPaymentRecord] = await Modules.promises.hooks.fire(
+        'getPaymentFromRecordPromise',
+        individualSubscription
+      )
+    } catch (error) {
+      logger.warn(
+        { err: error, userId },
+        'Failed to load payment record for customer.io subscription properties'
+      )
+    }
   }
+
+  let writefullData = null
+  try {
+    writefullData = await UserGetter.promises.getWritefullData(userId)
+  } catch (error) {
+    logger.warn(
+      { err: error, userId },
+      'Failed to load writefull data for customer.io subscription properties'
+    )
+  }
+
+  const aiBlockedByPolicyId = await _loadAiBlockedByPolicyId([
+    ...memberGroupSubscriptions,
+    ...managedGroupSubscriptions,
+  ])
+
+  const planProperties = CustomerIoPlanHelpers.getPlanProperties({
+    bestSubscription,
+    individualSubscription,
+    individualPaymentRecord,
+    memberGroupSubscriptions,
+    managedGroupSubscriptions,
+    userIsMemberOfGroupSubscription,
+    hasCommons,
+    writefullData,
+    aiBlockedByPolicyId,
+    userId,
+  })
+
+  await Modules.promises.hooks.fire('setUserProperties', userId, {
+    ...planProperties,
+    features,
+    overleaf_id: userId,
+    ...(user.email && { email: user.email }),
+  })
+}
+
+async function _loadAiBlockedByPolicyId(groupSubscriptions) {
+  const policyIds = [
+    ...new Set(
+      groupSubscriptions.map(sub => sub.groupPolicy?.toString()).filter(Boolean)
+    ),
+  ]
+
+  if (policyIds.length === 0) {
+    return new Map()
+  }
+
+  const policies = await GroupPolicy.find(
+    { _id: { $in: policyIds } },
+    { _id: 1, userCannotUseAIFeatures: 1 }
+  ).exec()
+  return new Map(
+    policies.map(policy => [
+      policy._id.toString(),
+      Boolean(policy.userCannotUseAIFeatures),
+    ])
+  )
 }
 
 /**

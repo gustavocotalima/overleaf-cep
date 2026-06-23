@@ -67,8 +67,18 @@ describe('UserGetter', function () {
       default: (ctx.settings = {
         reconfirmNotificationDays: 14,
         aiFeatures: {
-          freeTrialQuota: 'basic',
+          freeQuota: 'free',
+          standardQuota: 'standard',
+          basicQuota: 'basic',
           unlimitedQuota: 'unlimited',
+        },
+        quotaGrants: {
+          ai: {
+            free: 5,
+            basic: 5,
+            standard: 10,
+            unlimited: 200,
+          },
         },
       }),
     }))
@@ -243,6 +253,7 @@ describe('UserGetter', function () {
             cachedPastReconfirmDate: false,
             pastReconfirmDate: false,
             portal: undefined,
+            domainCapturedByGroup: undefined,
           },
         },
         {
@@ -253,6 +264,68 @@ describe('UserGetter', function () {
           lastConfirmedAt: null,
         },
       ])
+    })
+
+    it('should include domainCapturedByGroup in merged affiliation', async function (ctx) {
+      ctx.UserGetter.promises.getUser = sinon.stub().resolves(ctx.fakeUser)
+      const affiliationsData = [
+        {
+          email: 'email1@foo.bar',
+          role: null,
+          cached_confirmed_at: null,
+          cached_reconfirmed_at: null,
+          department: null,
+          entitlement: false,
+          inferred: false,
+          licence: 'free',
+          institution: {
+            name: 'University Name',
+            isUniversity: true,
+            confirmed: true,
+          },
+          last_day_to_reconfirm: undefined,
+          past_reconfirm_date: false,
+          portal: undefined,
+          group: { _id: 'grp1', domainCaptureEnabled: true },
+          domainCapturedByGroup: true,
+        },
+      ]
+      ctx.getUserAffiliations.resolves(affiliationsData)
+      const fullEmails = await ctx.UserGetter.promises.getUserFullEmails(
+        ctx.fakeUser._id
+      )
+      assert.strictEqual(fullEmails[0].affiliation.domainCapturedByGroup, true)
+    })
+
+    it('should include domainCapturedByGroup=false in merged affiliation when not captured', async function (ctx) {
+      ctx.UserGetter.promises.getUser = sinon.stub().resolves(ctx.fakeUser)
+      const affiliationsData = [
+        {
+          email: 'email1@foo.bar',
+          role: null,
+          cached_confirmed_at: null,
+          cached_reconfirmed_at: null,
+          department: null,
+          entitlement: false,
+          inferred: false,
+          licence: 'free',
+          institution: {
+            name: 'University Name',
+            isUniversity: true,
+            confirmed: true,
+          },
+          last_day_to_reconfirm: undefined,
+          past_reconfirm_date: false,
+          portal: undefined,
+          group: { _id: 'grp1', domainCaptureEnabled: true },
+          domainCapturedByGroup: false,
+        },
+      ]
+      ctx.getUserAffiliations.resolves(affiliationsData)
+      const fullEmails = await ctx.UserGetter.promises.getUserFullEmails(
+        ctx.fakeUser._id
+      )
+      assert.strictEqual(fullEmails[0].affiliation.domainCapturedByGroup, false)
     })
 
     it('should merge SAML identifier', async function (ctx) {

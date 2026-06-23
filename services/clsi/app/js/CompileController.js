@@ -1,3 +1,4 @@
+import OError from '@overleaf/o-error'
 import Path from 'node:path'
 import RequestParser from './RequestParser.js'
 import CompileManager from './CompileManager.js'
@@ -142,6 +143,7 @@ function compile(req, res, next) {
                   rootResourcePath: request.rootResourcePath,
                   stopOnFirstError: request.stopOnFirstError,
                 },
+                metricsOpts: request.metricsOpts,
               })
             }
 
@@ -155,6 +157,9 @@ function compile(req, res, next) {
                 timings,
                 buildId,
                 clsiCacheShard,
+                instanceType: Settings.apis.clsi.instanceType,
+                zone: Settings.apis.clsi.zone,
+                isSpotInstance: Settings.apis.clsi.isSpotInstance,
                 outputUrlPrefix: Settings.apis.clsi.outputUrlPrefix,
                 outputFiles: outputFiles.map(file => ({
                   url:
@@ -185,17 +190,14 @@ function stopCompile(req, res, next) {
 }
 
 function clearCache(req, res, next) {
-  ProjectPersistenceManager.clearProject(
-    req.params.project_id,
-    req.params.user_id,
-    function (error) {
-      if (error) {
-        return next(error)
-      }
-      // No content
+  const { project_id: projectId, user_id: userId } = req.params
+  CompileManager.stopCompile(projectId, userId, error => {
+    if (error) return next(OError.tag(error, 'stop compile'))
+    ProjectPersistenceManager.clearProject(projectId, userId, error => {
+      if (error) return next(OError.tag(error, 'clear project'))
       res.sendStatus(204)
-    }
-  )
+    })
+  })
 }
 
 function syncFromCode(req, res, next) {

@@ -7,6 +7,18 @@ const { ObjectId } = Schema
 // See https://stackoverflow.com/questions/386294/what-is-the-maximum-length-of-a-valid-email-address/574698#574698
 const MAX_EMAIL_LENGTH = 254
 const MAX_NAME_LENGTH = 255
+const refProviderSettingsSchema = {
+  enabled: { type: Boolean, default: true },
+  groups: {
+    type: [
+      {
+        id: { type: String },
+      },
+    ],
+    default: [],
+  },
+  disablePersonalLibrary: { type: Boolean, default: false },
+}
 
 export const UserSchema = new Schema(
   {
@@ -88,17 +100,19 @@ export const UserSchema = new Schema(
       spellCheckLanguage: { type: String, default: 'en' },
       pdfViewer: { type: String, default: 'pdfjs' },
       syntaxValidation: { type: Boolean },
+      previewTabs: { type: Boolean, default: false },
       fontFamily: { type: String },
       lineHeight: { type: String },
       mathPreview: { type: Boolean, default: true },
       breadcrumbs: { type: Boolean, default: true },
+      editorTabs: { type: Boolean, default: true },
+      nonBlinkingCursor: { type: Boolean, default: false },
       referencesSearchMode: { type: String, default: 'advanced' }, // 'advanced' or 'simple'
-      // enableNewEditor is being phased out in favor of enableNewEditorStageFour
-      // when moving the new editor to opt out (stage 4). However, we need to keep the
-      // old field for determining whether to show promotional material to users.
-      enableNewEditor: { type: Boolean },
-      enableNewEditorStageFour: { type: Boolean },
       darkModePdf: { type: Boolean, default: false },
+      floatingMenu: { type: Boolean, default: true },
+      zotero: refProviderSettingsSchema,
+      mendeley: refProviderSettingsSchema,
+      papers: refProviderSettingsSchema,
     },
     features: {
       collaborators: {
@@ -230,6 +244,10 @@ export const UserSchema = new Schema(
     suspended: { type: Boolean },
     dsMobileApp: {
       subscribed: { type: Boolean },
+    },
+    stripeCustomerIds: {
+      us: { type: String },
+      uk: { type: String },
     },
   },
   { minimize: false }

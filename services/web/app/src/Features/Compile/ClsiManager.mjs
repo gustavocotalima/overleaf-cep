@@ -1,9 +1,9 @@
 import { callbackify } from 'node:util'
 import { callbackifyMultiResult } from '@overleaf/promise-utils'
 import {
+  fetchStream,
   fetchString,
   fetchStringWithResponse,
-  fetchStream,
   RequestFailedError,
 } from '@overleaf/fetch-utils'
 import Settings from '@overleaf/settings'
@@ -24,6 +24,7 @@ import HistoryManager from '../History/HistoryManager.mjs'
 import SplitTestHandler from '../SplitTests/SplitTestHandler.mjs'
 import AnalyticsManager from '../Analytics/AnalyticsManager.mjs'
 import RedisWrapper from '../../infrastructure/RedisWrapper.mjs'
+import { getOutputFileURL } from './ClsiURLHelpers.mjs'
 
 // use the redis db with eviction policy enabled
 const rclient = RedisWrapper.client('clsi_cookie')
@@ -35,12 +36,16 @@ const NewBackendCloudClsiCookieManager = ClsiCookieManagerFactory(
   Settings.apis.clsi_new?.backendGroupName
 )
 
-const VALID_COMPILERS = ['pdflatex', 'latex', 'xelatex', 'lualatex']
+const VALID_COMPILERS = Settings.safeCompilers
 const OUTPUT_FILE_TIMEOUT_MS = 60000
 const CLSI_COOKIES_ENABLED = (Settings.clsiCookie?.key ?? '') !== ''
 
 // The timeout in services/clsi/app.js is 10 minutes, so we'll be on the safe side with 12 minutes
 const COMPILE_REQUEST_TIMEOUT_MS = 12 * 60 * 1000
+
+// Enable clsi-cache for all compiles for 20min when detecting low capacity.
+const ENABLE_COMPILE_FROM_CACHE_ON_503_MS = 20 * 60 * 1000
+let enableCompileFromCacheUntil = 0
 
 function _baseHistoryVersionKey(projectId, userId) {
   return `baseHistoryVersion:${projectId}:${userId}`
@@ -77,23 +82,25 @@ async function clearBaseHistoryVersion(projectId, userId) {
   await rclient.del(_baseHistoryVersionKey(projectId, userId))
 }
 
-function getNewCompileBackendClass(projectId, compileBackendClass) {
-  // Sample x% of projects to move up one bracket.
-  if (
-    SplitTestHandler.getPercentile(projectId, 'double-compile', 'release') >=
-    Settings.apis.clsi_new.sample
-  ) {
-    return null
-  }
+function getDoubleCompilePercentile(projectId) {
+  return SplitTestHandler.getPercentile(projectId, 'double-compile', 'release')
+}
 
+function getNewCompileBackendClass(projectId, compileBackendClass) {
+  let cfg
   switch (compileBackendClass) {
     case 'c3d':
-      return 'n4'
+      cfg = Settings.apis.clsi_new.doubleCompileFree
+      break
     case 'c4d':
-      return 'n4'
+      cfg = Settings.apis.clsi_new.doubleCompilePremium
+      break
     default:
       throw new Error('unknown ?compileBackendClass')
   }
+  if (!cfg.backendClass || !cfg.sample) return null
+  if (getDoubleCompilePercentile(projectId) >= cfg.sample) return null
+  return cfg.backendClass
 }
 
 /**
@@ -327,6 +334,7 @@ async function _sendBuiltRequest(projectId, userId, req, options) {
     outputUrlPrefix: compile.outputUrlPrefix,
     clsiCacheShard: compile.clsiCacheShard,
     baseHistoryVersion: compile.baseHistoryVersion,
+    instanceType: compile.instanceType,
   }
 }
 
@@ -437,7 +445,7 @@ async function _makeRequest(
   timer.done()
   let newClsiServerId
   if (CLSI_COOKIES_ENABLED) {
-    newClsiServerId = _getClsiServerIdFromResponse(response)
+    newClsiServerId = getClsiServerIdFromResponse(response)
     await ClsiCookieManager.promises.setServerId(
       projectId,
       userId,
@@ -596,7 +604,7 @@ async function _makeNewBackendRequest(
   timer.done()
   let newClsiServerId
   if (CLSI_COOKIES_ENABLED) {
-    newClsiServerId = _getClsiServerIdFromResponse(response)
+    newClsiServerId = getClsiServerIdFromResponse(response)
     await NewBackendCloudClsiCookieManager.promises.setServerId(
       projectId,
       userId,
@@ -677,7 +685,9 @@ async function _postToClsi(
         return { response: { compile: { status: 'conflict' } } }
       } else if (err.response.status === 423) {
         return { response: { compile: { status: 'compile-in-progress' } } }
-      } else if (err.response.status === 503) {
+      } else if (err.response.status === 502 || err.response.status === 503) {
+        enableCompileFromCacheUntil =
+          Date.now() + ENABLE_COMPILE_FROM_CACHE_ON_503_MS
         return { response: { compile: { status: 'unavailable' } } }
       } else if (err.response.status === 504) {
         return { response: { compile: { status: 'timedout' } } }
@@ -738,7 +748,7 @@ async function _buildRequest(projectId, userId, options) {
     throw new Errors.NotFoundError(`project does not exist: ${projectId}`)
   }
   if (!VALID_COMPILERS.includes(project.compiler)) {
-    project.compiler = 'pdflatex'
+    project.compiler = Settings.defaultLatexCompiler
   }
   const historyId = project.overleaf.history.id
   let { baseHistoryVersion } = options
@@ -749,21 +759,45 @@ async function _buildRequest(projectId, userId, options) {
 
   if (options.compileFromHistory && baseHistoryVersion === -1) {
     // full sync
-    return await _buildRequestFromHistoryFull(
-      projectId,
-      historyId,
-      options,
-      project
-    )
+    try {
+      return await _buildRequestFromHistoryFull(
+        projectId,
+        historyId,
+        options,
+        project
+      )
+    } catch (err) {
+      logger.warn(
+        { err, projectId, historyId },
+        'failed to compose history-full request'
+      )
+      // fall back to old compile mode
+      return await _buildRequest(projectId, userId, {
+        ...options,
+        compileFromHistory: false,
+      })
+    }
   } else if (options.compileFromHistory) {
     // incremental sync
-    return await _buildRequestFromHistoryIncremental(
-      projectId,
-      historyId,
-      options,
-      project,
-      baseHistoryVersion
-    )
+    try {
+      return await _buildRequestFromHistoryIncremental(
+        projectId,
+        historyId,
+        options,
+        project,
+        baseHistoryVersion
+      )
+    } catch (err) {
+      logger.warn(
+        { err, projectId, historyId, baseHistoryVersion },
+        'failed to compose history-incremental request'
+      )
+      // fall back to old compile mode
+      return await _buildRequest(projectId, userId, {
+        ...options,
+        compileFromHistory: false,
+      })
+    }
   }
 
   if (options.incrementalCompilesEnabled || options.syncType != null) {
@@ -820,17 +854,17 @@ async function getContentFromDocUpdaterIfMatch(projectId, project, options) {
 async function getOutputFileStream(
   projectId,
   userId,
-  options,
   clsiServerId,
   buildId,
   outputFilePath
 ) {
-  const { compileBackendClass, compileGroup } = options
-  const url = new URL(Settings.apis.clsi.downloadHost)
-  url.pathname = `/project/${projectId}/user/${userId}/build/${buildId}/output/${outputFilePath}`
-  url.searchParams.set('compileBackendClass', compileBackendClass)
-  url.searchParams.set('compileGroup', compileGroup)
-  url.searchParams.set('clsiserverid', clsiServerId)
+  const url = getOutputFileURL(
+    projectId,
+    userId,
+    buildId,
+    outputFilePath,
+    clsiServerId
+  )
   try {
     const stream = await fetchStream(url, {
       signal: AbortSignal.timeout(OUTPUT_FILE_TIMEOUT_MS),
@@ -882,21 +916,7 @@ function _collectGlobalBlobs(rawChangeOperations) {
   return globalBlobs
 }
 
-async function _buildRequestFromHistoryFull(
-  projectId,
-  historyId,
-  options,
-  project
-) {
-  await HistoryManager.promises.flushProject(projectId)
-  const {
-    chunk: {
-      history: { snapshot: rawSnapshot, changes: rawChanges },
-      startVersion,
-    },
-  } = await HistoryManager.promises.getLatestHistoryWithHistoryId(historyId)
-  const rawChangeOperations = _rawChangeOperationsFromChanges(rawChanges)
-  const globalBlobs = _collectGlobalBlobs(rawChangeOperations)
+function collectGlobalBlobsFromRawSnapshot(rawSnapshot, globalBlobs) {
   for (const { hash, rangesHash } of Object.values(rawSnapshot.files)) {
     if (hash && HistoryManager.isGlobalBlob(hash)) {
       globalBlobs.add(hash)
@@ -905,6 +925,30 @@ async function _buildRequestFromHistoryFull(
       globalBlobs.add(rangesHash)
     }
   }
+}
+
+async function _buildRequestFromHistoryFull(
+  projectId,
+  historyId,
+  options,
+  project
+) {
+  await HistoryManager.promises.flushProject(projectId)
+  const [
+    {
+      chunk: {
+        history: { snapshot: rawSnapshot, changes: rawChanges },
+        startVersion,
+      },
+    },
+    /* ensureNoResyncPending throws */
+  ] = await Promise.all([
+    HistoryManager.promises.getLatestHistoryWithHistoryId(historyId),
+    HistoryManager.promises.ensureNoResyncPending(projectId),
+  ])
+  const rawChangeOperations = _rawChangeOperationsFromChanges(rawChanges)
+  const globalBlobs = _collectGlobalBlobs(rawChangeOperations)
+  collectGlobalBlobsFromRawSnapshot(rawSnapshot, globalBlobs)
   options = {
     ...options,
     syncType: 'history-full',
@@ -931,22 +975,26 @@ async function _buildRequestFromHistoryIncremental(
   let size = 0
   while (hasMore) {
     let changes
-    ;({ changes, hasMore } =
-      await HistoryManager.promises.getChangesWithHistoryId(historyId, {
-        since,
-      }))
+    ;[{ changes, hasMore } /* resyncPending throws */] = await Promise.all([
+      HistoryManager.promises.getChangesWithHistoryId(historyId, { since }),
+      HistoryManager.promises.ensureNoResyncPending(projectId),
+    ])
     since += changes.length
     const newRawChangeOperations = _rawChangeOperationsFromChanges(changes)
     size += Buffer.from(JSON.stringify(newRawChangeOperations)).byteLength
     if (size > 6.5 * 1024 * 1024) {
       // clsi has a payload limit of 7MiB. Do not send too many operations.
       // Fall back to sending the latest snapshot instead.
-      return await _buildRequestFromHistoryFull(
-        projectId,
-        historyId,
-        options,
-        project
-      )
+      try {
+        return await _buildRequestFromHistoryFull(
+          projectId,
+          historyId,
+          options,
+          project
+        )
+      } catch (err) {
+        throw OError.tag(err, 'upgrade to history-full failed', { size })
+      }
     }
     rawChangeOperations.push(...newRawChangeOperations)
   }
@@ -1108,12 +1156,12 @@ function _finaliseRequest(projectId, options, project, docs, files) {
         compileGroup: options.compileGroup,
         // Overleaf alpha/staff users get compileGroup=alpha (via getProjectCompileLimits in CompileManager), enroll them into the premium rollout of clsi-cache.
         compileFromClsiCache:
-          ['alpha', 'priority'].includes(options.compileGroup) &&
-          options.compileFromClsiCache,
-        populateClsiCache:
+          // enable for premium compiles
           (['alpha', 'priority'].includes(options.compileGroup) ||
-            options.metricsPath === 'clsi-cache-template') &&
-          options.populateClsiCache,
+            // enable for free for short period when we saw low capacity
+            enableCompileFromCacheUntil > Date.now()) &&
+          options.compileFromClsiCache,
+        populateClsiCache: options.populateClsiCache,
         enablePdfCaching:
           (Settings.enablePdfCaching && options.enablePdfCaching) || false,
         pdfCachingMinChunkSize: options.pdfCachingMinChunkSize,
@@ -1129,6 +1177,16 @@ function _finaliseRequest(projectId, options, project, docs, files) {
       resources,
     },
   }
+}
+
+async function buildDocumentConversionRequest(projectId, userId, options) {
+  return await _buildRequest(projectId, userId, {
+    ...options,
+    // Use the history snapshot as populated on clsi-cache.
+    populateClsiCache: true,
+    // Read from mongo directly, skip redis.
+    incrementalCompilesEnabled: false,
+  })
 }
 
 async function wordCount(projectId, userId, file, limits, clsiserverid) {
@@ -1210,7 +1268,7 @@ async function syncTeX(
   }
 }
 
-function _getClsiServerIdFromResponse(response) {
+function getClsiServerIdFromResponse(response) {
   const setCookieHeaders = response.headers.raw()['set-cookie'] ?? []
   for (const header of setCookieHeaders) {
     const cookie = Cookie.parse(header)
@@ -1222,6 +1280,7 @@ function _getClsiServerIdFromResponse(response) {
 }
 
 export default {
+  collectGlobalBlobsFromRawSnapshot,
   _finaliseRequest,
   sendRequest: callbackifyMultiResult(sendRequest, [
     'status',
@@ -1233,6 +1292,7 @@ export default {
     'outputUrlPrefix',
     'buildId',
     'clsiCacheShard',
+    'instanceType',
   ]),
   sendExternalRequest: callbackifyMultiResult(sendExternalRequest, [
     'status',
@@ -1248,6 +1308,8 @@ export default {
   getOutputFileStream: callbackify(getOutputFileStream),
   wordCount: callbackify(wordCount),
   syncTeX: callbackify(syncTeX),
+  getClsiServerIdFromResponse,
+  CLSI_COOKIES_ENABLED,
   promises: {
     sendRequest,
     sendExternalRequest,
@@ -1256,5 +1318,6 @@ export default {
     getOutputFileStream,
     wordCount,
     syncTeX,
+    buildDocumentConversionRequest,
   },
 }

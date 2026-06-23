@@ -1,4 +1,4 @@
-import { consentTutorialKey } from '@modules/workbench/frontend/js/components/chat'
+import { AI_CONSENT_TUTORIAL_KEY } from '@/shared/hooks/use-ai-consent'
 import Workbench from '@modules/workbench/frontend/js/components/workbench'
 import { EditorProviders } from '../../helpers/editor-providers'
 import { EditorView } from '@codemirror/view'
@@ -13,7 +13,9 @@ describe('Workbench', { scrollBehavior: false }, function () {
       win.metaAttributesCache.set('ol-splitTestVariants', {
         'ai-workbench-release': 'enabled',
       })
-      win.metaAttributesCache.set('ol-inactiveTutorials', [consentTutorialKey])
+      win.metaAttributesCache.set('ol-inactiveTutorials', [
+        AI_CONSENT_TUTORIAL_KEY,
+      ])
     })
   })
 
@@ -55,7 +57,7 @@ describe('Workbench', { scrollBehavior: false }, function () {
 
       cy.contains('Supporting your research').should('not.exist')
 
-      cy.contains('Get early access').should('not.exist')
+      cy.contains('Upgrade to get started').should('not.exist')
 
       cy.contains('AI can make mistakes').should('exist')
     })
@@ -80,7 +82,7 @@ describe('Workbench', { scrollBehavior: false }, function () {
 
       cy.findByRole('button', { name: /accept and continue/i }).should('exist')
 
-      cy.contains('Get early access').should('not.exist')
+      cy.contains('Upgrade to get started').should('not.exist')
 
       cy.get('.conversation-footer').should('have.attr', 'inert', 'true')
     })
@@ -115,26 +117,21 @@ describe('Workbench', { scrollBehavior: false }, function () {
       )
     })
     it('should show upgrade notification', function () {
-      cy.get('.workbench-upgrade-notification').should('exist')
-      cy.contains('Get early access').should('be.visible')
+      cy.get('.ai-upgrade-paywall-btn').should('exist')
+      cy.contains('Upgrade to get started').should('be.visible')
 
-      cy.findByRole('button', { name: /get ai assist/i }).should('exist')
+      cy.findByRole('link', { name: /upgrade/i }).should('exist')
 
       cy.get('.workbench-consent-prompt').should('not.exist')
 
       cy.get('.conversation-footer').should('have.attr', 'inert', 'true')
     })
 
-    it('should dispatch paywall event when clicking upgrade button', function () {
-      const paywallSpy = cy.spy().as('paywallSpy')
-      cy.window().then(win => {
-        win.addEventListener('aiAssist:showPaywall', paywallSpy)
-      })
-
-      cy.findByRole('button', { name: /get ai assist/i }).click()
-
-      // Should dispatch the paywall event
-      cy.get('@paywallSpy').should('have.been.calledOnce')
+    it('should link to the plans interstitial from the upgrade button', function () {
+      cy.findByRole('link', { name: /upgrade/i })
+        .should('have.attr', 'href')
+        .and('include', '/user/subscription/choose-your-plan')
+        .and('include', 'paywall-type=workbench')
     })
   })
 })

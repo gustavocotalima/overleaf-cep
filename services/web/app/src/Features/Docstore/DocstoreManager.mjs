@@ -83,6 +83,29 @@ async function getAllDocs(projectId) {
 }
 
 /**
+ * @param {string} projectId
+ */
+async function getAllDocsWithRanges(projectId) {
+  const url = new URL(settings.apis.docstore.url)
+  url.pathname = path.posix.join(
+    'project',
+    projectId.toString(),
+    'doc-with-ranges'
+  )
+  try {
+    return await fetchJson(url, { signal: AbortSignal.timeout(TIMEOUT) })
+  } catch (error) {
+    if (error instanceof RequestFailedError) {
+      throw new OError('docstore api responded with non-success code', {
+        projectId,
+        status: error.response.status,
+      })
+    }
+    throw error
+  }
+}
+
+/**
  *
  * @param {string|ObjectId} projectId
  * @return {Promise<*>}
@@ -100,6 +123,31 @@ async function getAllDeletedDocs(projectId) {
       })
     }
     throw OError.tag(error, 'could not get deleted docs from docstore')
+  }
+}
+
+/**
+ *
+ * @param {string|ObjectId} projectId
+ * @return {Promise<{_id: string, version: number}[]>}
+ */
+async function getAllDocVersions(projectId) {
+  const url = new URL(settings.apis.docstore.url)
+  url.pathname = path.posix.join(
+    'project',
+    projectId.toString(),
+    'doc-versions'
+  )
+  try {
+    return await fetchJson(url, { signal: AbortSignal.timeout(TIMEOUT) })
+  } catch (error) {
+    if (error instanceof RequestFailedError) {
+      throw new OError('docstore api responded with non-success code', {
+        projectId,
+        status: error.response.status,
+      })
+    }
+    throw OError.tag(error, 'could not get doc versions from docstore')
   }
 }
 
@@ -238,7 +286,13 @@ async function isDocDeleted(projectId, docId) {
  * @param ranges
  * @return {Promise<{modified: *, rev: *}>}
  */
-async function updateDoc(projectId, docId, lines, version, ranges) {
+async function updateDoc(
+  projectId,
+  docId,
+  lines,
+  version,
+  /** @type {any} */ ranges
+) {
   const url = new URL(settings.apis.docstore.url)
   url.pathname = path.posix.join('project', projectId, 'doc', docId)
   try {
@@ -269,10 +323,12 @@ async function updateDoc(projectId, docId, lines, version, ranges) {
  * Asks docstore whether any doc in the project has ranges
  *
  * @param {string} projectId
+ * @param {boolean} useSecondary
  */
-async function projectHasRanges(projectId) {
+async function projectHasRanges(projectId, useSecondary = false) {
   const url = new URL(settings.apis.docstore.url)
   url.pathname = path.posix.join('project', projectId, 'has-ranges')
+  if (useSecondary) url.searchParams.set('useSecondary', 'true')
   try {
     const body = await fetchJson(url, { signal: AbortSignal.timeout(TIMEOUT) })
     return body.projectHasRanges
@@ -362,7 +418,9 @@ export default {
   destroyProject: callbackify(destroyProject),
   promises: {
     deleteDoc,
+    getAllDocVersions,
     getAllDocs,
+    getAllDocsWithRanges,
     getAllDeletedDocs,
     getAllRanges,
     getDoc,

@@ -4,6 +4,7 @@ redis-wrapper
 --env-pass-through=
 --esmock-loader=False
 --is-library=True
---node-version=24.13.0
+--node-version=24.14.1
+--package-name=@overleaf/redis-wrapper
 --pipeline-owner=32
 --public-repo=False

@@ -105,6 +105,10 @@
       }
     }
 
+    &.link-sm {
+      @include body-sm;
+    }
+
     &.btn:hover {
       text-decoration: none;
     }
@@ -388,6 +392,7 @@
     @extend .round-background;
 
     background: var(--green-30);
+    color: var(--dark-jungle-green);
   }
 
   .why-latex {

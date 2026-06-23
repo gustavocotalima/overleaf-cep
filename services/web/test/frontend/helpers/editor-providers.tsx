@@ -45,7 +45,7 @@ import {
   ProjectMetadata,
   ProjectUpdate,
 } from '@/shared/context/types/project-metadata'
-import { UserId } from '../../../types/user'
+import { User, UserId } from '../../../types/user'
 import { ProjectCompiler } from '../../../types/project-settings'
 import { ReferencesContext } from '@/features/ide-react/context/references-context'
 import { useEditorAnalytics } from '@/shared/hooks/use-editor-analytics'
@@ -55,7 +55,6 @@ import { DetachCompileContext } from '@/shared/context/detach-compile-context'
 import { type CompileContext } from '@/shared/context/local-compile-context'
 import { EditorContext } from '@/shared/context/editor-context'
 import { Cobranding } from '@ol-types/cobranding'
-import { TutorialContext } from '@/shared/context/tutorial-context'
 import { EDITOR_SESSION_ID } from '@/features/pdf-preview/util/metrics'
 
 // these constants can be imported in tests instead of
@@ -67,13 +66,18 @@ export const USER_EMAIL = 'testuser@example.com'
 
 const defaultUserSettings = {
   ...defaultSettings,
-  enableNewEditor: false,
-  enableNewEditorLegacy: false,
   referencesSearchMode: 'simple',
 } satisfies UserSettings
 
 export type EditorProvidersProps = {
-  user?: { id: string; email: string; signUpDate?: string }
+  user?: Pick<
+    User,
+    | 'id'
+    | 'email'
+    | 'signUpDate'
+    | 'activeGroupSubscriptions'
+    | 'isProfessionalGroupPlan'
+  >
   projectId?: string
   projectName?: string
   projectOwner?: ProjectMetadata['owner']
@@ -195,6 +199,7 @@ export function EditorProviders({
     'dropbox',
     'link-sharing',
   ])
+  window.metaAttributesCache.set('ol-defaultLatexCompiler', 'pdflatex')
 
   const scope = merge(
     {
@@ -275,23 +280,31 @@ export function makeEditorProvider({
   cobranding = undefined,
   renameProject = () => {},
   isRestrictedTokenMember,
+  hasSuggestionsLeft = false,
+  hasTokensLeft = false,
+  premiumSuggestionResetDate = new Date(),
+  tokenResetDate = new Date(),
 }: {
   isProjectOwner?: boolean
   cobranding?: Cobranding
   renameProject?: () => void
   isRestrictedTokenMember?: boolean
+  hasSuggestionsLeft?: boolean
+  hasTokensLeft?: boolean
+  premiumSuggestionResetDate?: Date
+  tokenResetDate?: Date
 } = {}) {
   const EditorProvider: FC<PropsWithChildren> = ({ children }) => {
     const value = {
       isProjectOwner,
       renameProject,
       isPendingEditor: false,
-      hasSuggestionsLeft: false,
-      premiumSuggestionResetDate: new Date(),
-      hasTokensLeft: false,
+      hasSuggestionsLeft,
+      premiumSuggestionResetDate,
+      hasTokensLeft,
       tokensLeft: 0,
       setTokensLeft: () => {},
-      tokenResetDate: new Date(),
+      tokenResetDate,
       setTokenResetDate: () => {},
       suggestionsLeft: 0,
       setSuggestionsLeft: () => {},
@@ -309,25 +322,6 @@ export function makeEditorProvider({
     )
   }
   return EditorProvider
-}
-
-export const makeTutorialProvider = (opts?: {
-  inactiveTutorials: string[]
-}) => {
-  const TutorialProvider: FC<PropsWithChildren> = ({ children }) => {
-    const value = {
-      deactivateTutorial: () => {},
-      inactiveTutorials: opts?.inactiveTutorials ?? [],
-      currentPopup: null,
-      setCurrentPopup: () => {},
-    }
-    return (
-      <TutorialContext.Provider value={value}>
-        {children}
-      </TutorialContext.Provider>
-    )
-  }
-  return TutorialProvider
 }
 
 const makeReferencesProvider = () => {
@@ -585,6 +579,8 @@ const makeLayoutProvider = (
         restoreView,
         handleChangeLayout,
         handleDetach,
+        focusMode: layout.focusMode ?? false,
+        setFocusMode: layout.setFocusMode ?? (() => {}),
       }),
       [
         reattach,
@@ -658,6 +654,7 @@ export function makeEditorPropertiesProvider(
     const value = {
       showVisual,
       setShowVisual,
+      showVisualForFile: () => showVisual,
       showSymbolPalette,
       setShowSymbolPalette,
       toggleSymbolPalette,

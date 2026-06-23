@@ -25,6 +25,12 @@ export function initialize(app) {
 
   app.post('/project/:project_id/flush', HttpController.flushProject)
 
+  app.get(
+    '/project/:project_id/resync-pending',
+    HttpController.getResyncPending
+  )
+  app.get('/project/:project_id/debug-info', HttpController.getDebugInfo)
+
   app.post('/project/:project_id/resync', HttpController.resyncProject)
 
   app.get('/project/:project_id/dump', HttpController.dumpProject)
@@ -77,7 +83,11 @@ export function initialize(app) {
 
   app.get('/project/:history_id/blob/:hash', HttpController.getProjectBlob)
 
+  app.post('/project/:project_id/clone', HttpController.cloneProject)
+
   app.get('/status/failures', HttpController.getFailures)
+
+  app.get('/status/failures-full', HttpController.getFailuresFull)
 
   app.get('/status/queue', HttpController.getQueueCounts)
 

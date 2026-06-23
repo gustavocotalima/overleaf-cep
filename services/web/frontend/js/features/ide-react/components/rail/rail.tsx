@@ -56,6 +56,13 @@ const moduleRailPopovers = (
   }[]
 ).map(({ import: { default: element } }) => element)
 
+const moduleRailActions = (
+  importOverleafModules('railActions') as {
+    import: { default: RailAction }
+    path: string
+  }[]
+).map(({ import: { default: action } }) => action)
+
 export const RailLayout = () => {
   const { sendEvent } = useEditorAnalytics()
   const { t } = useTranslation()
@@ -66,7 +73,7 @@ export const RailLayout = () => {
   const gitBridgeEnabled = getMeta('ol-gitBridgeEnabled')
   const { isOverleaf } = getMeta('ol-ExposedSettings')
 
-  const { view, setLeftMenuShown } = useLayoutContext()
+  const { view, setLeftMenuShown, focusMode } = useLayoutContext()
 
   const { markMessagesAsRead } = useChatContext()
 
@@ -152,6 +159,7 @@ export const RailLayout = () => {
         title: t('help'),
         dropdown: <RailHelpDropdown />,
       },
+      ...moduleRailActions,
       {
         key: 'settings',
         icon: 'settings',
@@ -172,7 +180,8 @@ export const RailLayout = () => {
         handler: () => {
           setLeftMenuShown(true)
         },
-        label: t('settings'),
+        menuLabel: t('settings'),
+        label: t('open_settings'),
       },
     ],
     [t, setLeftMenuShown]
@@ -262,7 +271,9 @@ export const RailLayout = () => {
           But it should be identified as a navigation landmark.
           Therefore, we nest them: the parent <nav> is the landmark, and its child gets the "role="tablist"". */}
       <nav
-        className={classNames('ide-rail', { hidden: isHistoryView })}
+        className={classNames('ide-rail', {
+          hidden: isHistoryView || focusMode,
+        })}
         aria-label={t('sidebar')}
       >
         <Nav activeKey={selectedTab} className="ide-rail-tabs-nav">
@@ -297,17 +308,20 @@ export const RailLayout = () => {
           </nav>
         </Nav>
       </nav>
-      {moduleRailPopovers
-        .filter(shouldIncludeElement)
-        .map(({ key, Component, ref }) => (
-          <Component key={key} ref={ref} />
-        ))}
+      {!focusMode &&
+        moduleRailPopovers
+          .filter(shouldIncludeElement)
+          .map(({ key, Component, ref }) => <Component key={key} ref={ref} />)}
       <RailPanel
         isReviewPanelOpen={isReviewPanelOpen}
         isHistoryView={isHistoryView}
         railTabs={railTabs}
+        focusMode={focusMode}
       />
-      <RailResizeHandle isReviewPanelOpen={isReviewPanelOpen} />
+      <RailResizeHandle
+        isReviewPanelOpen={isReviewPanelOpen}
+        focusMode={focusMode}
+      />
       <RailModals />
     </TabContainer>
   )

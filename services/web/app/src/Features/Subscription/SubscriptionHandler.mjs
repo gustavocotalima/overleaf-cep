@@ -9,60 +9,15 @@ import SubscriptionUpdater from './SubscriptionUpdater.mjs'
 import LimitationsManager from './LimitationsManager.mjs'
 import EmailHandler from '../Email/EmailHandler.mjs'
 import { callbackify } from '@overleaf/promise-utils'
-import UserUpdater from '../User/UserUpdater.mjs'
 import Modules from '../../infrastructure/Modules.mjs'
 import { AI_ADD_ON_CODE } from './AiHelper.mjs'
+import CustomerIoPlanHelpers from './CustomerIoPlanHelpers.mjs'
+import WorkbenchRateLimiter from '../../infrastructure/rate-limiters/WorkbenchRateLimiter.mjs'
+import AiFeatureUsageRateLimiter from '../../infrastructure/rate-limiters/AiFeatureUsageRateLimiter.mjs'
 
 /**
  * @import { PaymentProviderSubscriptionChange } from './PaymentProviderEntities.mjs'
  */
-
-async function validateNoSubscriptionInRecurly(userId) {
-  let subscriptions =
-    await RecurlyWrapper.promises.listAccountActiveSubscriptions(userId)
-
-  if (!subscriptions) {
-    subscriptions = []
-  }
-
-  if (subscriptions.length > 0) {
-    await SubscriptionUpdater.promises.syncSubscription(
-      subscriptions[0],
-      userId
-    )
-
-    return false
-  }
-
-  return true
-}
-
-async function createSubscription(user, subscriptionDetails, recurlyTokenIds) {
-  const valid = await validateNoSubscriptionInRecurly(user._id)
-
-  if (!valid) {
-    throw new Error('user already has subscription in recurly')
-  }
-
-  const recurlySubscription = await RecurlyWrapper.promises.createSubscription(
-    user,
-    subscriptionDetails,
-    recurlyTokenIds
-  )
-
-  if (recurlySubscription.trial_started_at) {
-    const trialStartedAt = new Date(recurlySubscription.trial_started_at)
-    await UserUpdater.promises.updateUser(
-      { _id: user._id, lastTrial: { $not: { $gt: trialStartedAt } } },
-      { $set: { lastTrial: trialStartedAt } }
-    )
-  }
-
-  await SubscriptionUpdater.promises.syncSubscription(
-    recurlySubscription,
-    user._id
-  )
-}
 
 /**
  * Preview the effect of changing the subscription plan
@@ -82,7 +37,8 @@ async function previewSubscriptionChange(userId, planCode) {
 
 /**
  * @param user
- * @param planCode
+ * @param {any} user
+ * @param {any} planCode
  */
 async function updateSubscription(user, planCode) {
   let hasSubscription = false
@@ -106,16 +62,45 @@ async function updateSubscription(user, planCode) {
     return
   }
 
+  const previousPlanType = CustomerIoPlanHelpers.normalizePlanType({
+    plan: {
+      planCode: subscription.planCode,
+      groupPlan: subscription.groupPlan,
+    },
+  })
+
   await Modules.promises.hooks.fire(
     'updatePaidSubscription',
     subscription,
     planCode,
     user._id
   )
+
+  try {
+    await WorkbenchRateLimiter.resetTokenUsage(user._id)
+    await AiFeatureUsageRateLimiter.resetFeatureUsage(user._id)
+  } catch (err) {
+    logger.error({ err, userId: user._id }, 'failed to reset AI usage limits')
+  }
+
+  const newPlanType =
+    CustomerIoPlanHelpers.normalizePlanTypeFromPlanCode(planCode)
+  if (previousPlanType && previousPlanType !== newPlanType) {
+    Modules.promises.hooks
+      .fire('setUserProperties', user._id, {
+        previous_plan_type: previousPlanType,
+      })
+      .catch(err => {
+        logger.warn(
+          { err, userId: user._id },
+          'Failed to set previous_plan_type in customer.io'
+        )
+      })
+  }
 }
 
 /**
- * @param user
+ * @param {any} user
  */
 async function cancelPendingSubscriptionChange(user) {
   const { hasSubscription, subscription } =
@@ -151,7 +136,7 @@ async function cancelPendingSubscriptionChange(user) {
 
 /**
  * Send cancellation email to user with split test for AI Assist addon
- * @param user
+ * @param {any} user
  */
 async function _sendCancellationEmail(user) {
   const emailOpts = {
@@ -174,7 +159,7 @@ async function _sendCancellationEmail(user) {
 }
 
 /**
- * @param user
+ * @param {any} user
  */
 async function cancelSubscription(user) {
   const { hasSubscription, subscription } =
@@ -187,7 +172,7 @@ async function cancelSubscription(user) {
 }
 
 /**
- * @param user
+ * @param {any} user
  */
 async function reactivateSubscription(user) {
   try {
@@ -220,8 +205,8 @@ async function reactivateSubscription(user) {
 }
 
 /**
- * @param recurlySubscription
- * @param requesterData
+ * @param {any} recurlySubscription
+ * @param {any} requesterData
  */
 async function syncSubscription(recurlySubscription, requesterData) {
   const storedSubscription = await RecurlyWrapper.promises.getSubscription(
@@ -250,7 +235,7 @@ async function syncSubscription(recurlySubscription, requesterData) {
  * This is used because Recurly doesn't always attempt collection of paast due
  * invoices after Paypal billing info were updated.
  *
- * @param recurlyAccountCode
+ * @param {any} recurlyAccountCode
  */
 async function attemptPaypalInvoiceCollection(recurlyAccountCode) {
   const billingInfo =
@@ -274,6 +259,10 @@ async function attemptPaypalInvoiceCollection(recurlyAccountCode) {
   )
 }
 
+/**
+ * @param {any} subscription
+ * @param {any} daysToExtend
+ */
 async function extendTrial(subscription, daysToExtend) {
   await Modules.promises.hooks.fire('extendTrial', subscription, daysToExtend)
 }
@@ -313,7 +302,7 @@ async function purchaseAddon(userId, addOnCode, quantity) {
 /**
  * Cancels an add-on for a user
  *
- * @param user
+ * @param {any} user
  * @param {string} addOnCode
  */
 async function removeAddon(user, addOnCode) {
@@ -334,6 +323,10 @@ async function reactivateAddon(userId, addOnCode) {
   await Modules.promises.hooks.fire('reactivateAddOn', userId, addOnCode)
 }
 
+/**
+ * @param {any} user
+ * @param {any} pauseCycles
+ */
 async function pauseSubscription(user, pauseCycles) {
   // only allow pausing on monthly plans not in a trial
   const { subscription } =
@@ -367,8 +360,9 @@ async function pauseSubscription(user, pauseCycles) {
     pauseCycles
   )
 }
-
-async function resumeSubscription(user) {
+/**
+ * @param {any} user
+ */ async function resumeSubscription(user) {
   const { subscription } =
     await LimitationsManager.promises.userHasSubscription(user)
   if (
@@ -381,8 +375,6 @@ async function resumeSubscription(user) {
 }
 
 export default {
-  validateNoSubscriptionInRecurly: callbackify(validateNoSubscriptionInRecurly),
-  createSubscription: callbackify(createSubscription),
   previewSubscriptionChange: callbackify(previewSubscriptionChange),
   updateSubscription: callbackify(updateSubscription),
   cancelPendingSubscriptionChange: callbackify(cancelPendingSubscriptionChange),
@@ -398,8 +390,6 @@ export default {
   pauseSubscription: callbackify(pauseSubscription),
   resumeSubscription: callbackify(resumeSubscription),
   promises: {
-    validateNoSubscriptionInRecurly,
-    createSubscription,
     previewSubscriptionChange,
     updateSubscription,
     cancelPendingSubscriptionChange,

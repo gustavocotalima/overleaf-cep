@@ -8,7 +8,15 @@ import { MenuBarDropdown } from '@/shared/components/menu-bar/menu-bar-dropdown'
 import { MenuBarOption } from '@/shared/components/menu-bar/menu-bar-option'
 import { useTranslation } from 'react-i18next'
 import ChangeLayoutOptions from './change-layout-options'
-import { ElementType, lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  ElementType,
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
 import { useLayoutContext } from '@/shared/context/layout-context'
 import { useCommandProvider } from '@/features/ide-react/hooks/use-command-provider'
 import CommandDropdown, {
@@ -27,21 +35,25 @@ import InstallPackageModal from '@/features/package-manager/components/install-p
 import { getJSON } from '@/infrastructure/fetch-json'
 import { useProjectContext } from '@/shared/context/project-context'
 import useOpenProject from '@/shared/hooks/use-open-project'
+import importOverleafModules from '../../../../../macros/import-overleaf-module.macro'
+import { useFeatureFlag } from '@/shared/context/split-test-context'
+import ReviewModeOptions from './review-mode-options'
 
 const GoogleDriveExportModal = lazy(
-  () =>
-    import('@/features/google-drive/components/google-drive-export-modal')
+  () => import('@/features/google-drive/components/google-drive-export-modal')
 )
 const GoogleDriveImportModal = lazy(
-  () =>
-    import('@/features/google-drive/components/google-drive-import-modal')
+  () => import('@/features/google-drive/components/google-drive-import-modal')
 )
-import importOverleafModules from '../../../../../macros/import-overleaf-module.macro'
 
 const menubarExtraComponents = importOverleafModules(
   'menubarExtraComponents'
 ) as {
   import: { default: ElementType }
+}[]
+
+const insertMenuSections = importOverleafModules('insertMenuSections') as {
+  import: { default: MenuSectionStructure[] }
 }[]
 
 export const ToolbarMenuBar = () => {
@@ -64,7 +76,8 @@ export const ToolbarMenuBar = () => {
   const showDocumentation = getMeta('ol-wikiEnabled')
   const googleDriveEnabled = getMeta('ol-googleDriveEnabled') as boolean
 
-  // Check Google Drive connection status
+  const hasEditorTabs = useFeatureFlag('editor-tabs')
+
   useEffect(() => {
     if (!googleDriveEnabled || anonymous) return
     getJSON('/user/google-drive/status')
@@ -72,7 +85,6 @@ export const ToolbarMenuBar = () => {
       .catch(() => setGDriveConnected(false))
   }, [googleDriveEnabled, anonymous])
 
-  // Handle Google Drive OAuth return
   useEffect(() => {
     if (!gDriveConnected) return
     const params = new URLSearchParams(window.location.search)
@@ -160,7 +172,15 @@ export const ToolbarMenuBar = () => {
           ]
         : []),
     ],
-    [t, setView, view, wordCountEnabled, anonymous, googleDriveEnabled, gDriveConnected]
+    [
+      t,
+      setView,
+      view,
+      wordCountEnabled,
+      anonymous,
+      googleDriveEnabled,
+      gDriveConnected,
+    ]
   )
   const fileMenuStructure: MenuStructure = useMemo(
     () => [
@@ -175,7 +195,19 @@ export const ToolbarMenuBar = () => {
       { id: 'submit', children: ['submit-project', 'manage-template'] },
       {
         id: 'file-download',
-        children: ['download-as-source-zip', 'download-pdf'],
+        children: [
+          {
+            id: 'file-download-group',
+            title: t('download'),
+            children: [
+              'download-as-source-zip',
+              'download-pdf',
+              'export-as-docx',
+              'export-as-markdown',
+              'export-as-html',
+            ],
+          },
+        ],
       },
       ...(googleDriveEnabled
         ? [
@@ -193,7 +225,7 @@ export const ToolbarMenuBar = () => {
         children: ['open-settings'],
       },
     ],
-    [googleDriveEnabled]
+    [t, googleDriveEnabled]
   )
 
   const editMenuStructure: MenuStructure = useMemo(
@@ -241,6 +273,9 @@ export const ToolbarMenuBar = () => {
         id: 'insert-comment',
         children: ['comment'],
       },
+      ...insertMenuSections.flatMap(
+        ({ import: { default: sections } }) => sections
+      ),
     ],
     [t]
   )
@@ -282,17 +317,29 @@ export const ToolbarMenuBar = () => {
       id: 'pdf-controls',
       children: [
         'view-pdf-presentation-mode',
-        'view-pdf-zoom-in',
-        'view-pdf-zoom-out',
-        'view-pdf-fit-width',
-        'view-pdf-fit-height',
+        {
+          id: 'pdf-zoom-control-group',
+          title: t('pdf_zoom'),
+          children: [
+            'view-pdf-zoom-in',
+            'view-pdf-zoom-out',
+            'view-pdf-fit-width',
+            'view-pdf-fit-height',
+          ],
+        },
       ],
     }),
     [t]
   )
 
-  const { mathPreview, setMathPreview, breadcrumbs, setBreadcrumbs } =
-    useProjectSettingsContext()
+  const {
+    mathPreview,
+    setMathPreview,
+    breadcrumbs,
+    setBreadcrumbs,
+    editorTabs,
+    setEditorTabs,
+  } = useProjectSettingsContext()
 
   const toggleMathPreview = useCallback(() => {
     setMathPreview(!mathPreview)
@@ -301,6 +348,10 @@ export const ToolbarMenuBar = () => {
   const toggleBreadcrumbs = useCallback(() => {
     setBreadcrumbs(!breadcrumbs)
   }, [setBreadcrumbs, breadcrumbs])
+
+  const toggleEditorTabs = useCallback(() => {
+    setEditorTabs(!editorTabs)
+  }, [setEditorTabs, editorTabs])
 
   const { setActiveModal } = useRailContext()
   const openKeyboardShortcutsModal = useCallback(() => {
@@ -329,8 +380,9 @@ export const ToolbarMenuBar = () => {
           className="ide-redesign-toolbar-dropdown-toggle-subdued ide-redesign-toolbar-button-subdued"
         >
           <ChangeLayoutOptions />
+          <ReviewModeOptions />
           <DropdownDivider />
-          <DropdownHeader>Editor settings</DropdownHeader>
+          <DropdownHeader>{t('editor_settings')}</DropdownHeader>
           <MenuBarOption
             eventKey="show_breadcrumbs"
             title={t('show_breadcrumbs')}
@@ -339,6 +391,16 @@ export const ToolbarMenuBar = () => {
             }
             onClick={toggleBreadcrumbs}
           />
+          {hasEditorTabs && (
+            <MenuBarOption
+              eventKey="show_editor_tabs"
+              title={t('show_editor_tabs')}
+              leadingIcon={
+                editorTabs ? 'check' : <DropdownItem.EmptyLeadingIcon />
+              }
+              onClick={toggleEditorTabs}
+            />
+          )}
           <MenuBarOption
             eventKey="show_equation_preview"
             title={t('show_equation_preview')}

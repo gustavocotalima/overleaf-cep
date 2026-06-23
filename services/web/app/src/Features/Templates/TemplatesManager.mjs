@@ -34,9 +34,9 @@ const TemplatesManager = {
     imageName,
     spellCheckLanguage
   ) {
-
-    compiler = ProjectOptionsHandler.normalizeCompiler(compiler || 'pdflatex')
-
+    compiler = ProjectOptionsHandler.normalizeCompiler(
+      compiler || settings.defaultLatexCompiler
+    )
     try {
        imageName = ProjectOptionsHandler.normalizeImageName(imageName)
     } catch {
@@ -50,14 +50,14 @@ const TemplatesManager = {
     })
 
     const projectName = ProjectDetailsHandler.fixProjectName(templateName)
-    const dumpPath = `${settings.path.dumpFolder}/${crypto.randomUUID()}`
+    const dumpPath = `${settings.path.dumpFolder}/${crypto.randomUUID()}_templates-manager`
     const writeStream = fs.createWriteStream(dumpPath)
 
     try {
       const attributes = {
         compiler,
         imageName,
-        spellCheckLanguage,
+        spellCheckLanguage
       }
       if (brandVariationId) attributes.brandVariationId = brandVariationId
 
@@ -117,11 +117,11 @@ const TemplatesManager = {
     if (mainFile == null) {
       return
     }
-    const rootDocId = await ProjectRootDocManager.setRootDocFromName(
+    const result = await ProjectRootDocManager.setRootDocFromName(
       project._id,
       mainFile
     )
-    if (rootDocId) project.rootDoc_id = rootDocId
+    if (result) project.rootDoc_id = result.rootDocId
   },
 
   async fetchFromV1(templateId) {

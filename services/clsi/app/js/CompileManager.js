@@ -107,7 +107,7 @@ async function doCompile(request, stats, timings) {
 
   let resourceList, baseHistoryVersion
   try {
-    if (request.rawChangeOperations) {
+    if (request.isCompileFromHistory) {
       ;({ resourceList, baseHistoryVersion } =
         await HistoryResourceWriter.syncResourcesToDisk(
           projectId,
@@ -122,6 +122,25 @@ async function doCompile(request, stats, timings) {
         request,
         compileDir
       )
+
+      // apply a series of file modifications/creations for draft mode and tikz
+      if (request.draft) {
+        await DraftModeManager.promises.injectDraftMode(
+          Path.join(compileDir, request.rootResourcePath)
+        )
+      }
+
+      const needsMainFile = await TikzManager.promises.checkMainFile(
+        compileDir,
+        request.rootResourcePath,
+        resourceList
+      )
+      if (needsMainFile) {
+        await TikzManager.promises.injectOutputFile(
+          compileDir,
+          request.rootResourcePath
+        )
+      }
     }
   } catch (error) {
     if (error instanceof Errors.FilesOutOfSyncError) {
@@ -173,23 +192,9 @@ async function doCompile(request, stats, timings) {
     }
   }
 
-  // apply a series of file modifications/creations for draft mode and tikz
-  if (request.draft) {
-    await DraftModeManager.promises.injectDraftMode(
-      Path.join(compileDir, request.rootResourcePath)
-    )
-  }
-
-  const needsMainFile = await TikzManager.promises.checkMainFile(
-    compileDir,
-    request.rootResourcePath,
-    resourceList
-  )
-  if (needsMainFile) {
-    await TikzManager.promises.injectOutputFile(
-      compileDir,
-      request.rootResourcePath
-    )
+  // Pass through checkpoint setting
+  if (request.enableCheckpoint) {
+    env.ENABLE_CHECKPOINT = '1'
   }
 
   const compileStart = Date.now()
@@ -383,7 +388,17 @@ async function _readFdbFile(compileDir) {
 
 async function stopCompile(projectId, userId) {
   const compileName = getCompileName(projectId, userId)
+  const lock = LockManager.getExistingLock(getCompileDir(projectId, userId))
+  let lockReleased
+  if (lock) {
+    lockReleased = lock.waitForRelease()
+  } else {
+    if (!LatexRunner.isRunning(compileName)) return
+    logger.warn({ projectId, userId }, 'found running compile without lock')
+    lockReleased = Promise.resolve()
+  }
   await LatexRunner.promises.killLatex(compileName)
+  await lockReleased
 }
 
 async function clearProject(projectId, userId) {
@@ -616,7 +631,8 @@ async function _runSynctex(projectId, userId, command, opts) {
           imageName || defaultImageName,
           timeout,
           {},
-          compileGroup
+          compileGroup,
+          null
         )
         return {
           stdout,
@@ -664,7 +680,8 @@ async function wordcount(projectId, userId, filename, image) {
       image,
       timeout,
       {},
-      compileGroup
+      compileGroup,
+      null
     )
     const results = _parseWordcountFromOutput(stdout)
     logger.debug(
@@ -850,7 +867,7 @@ function _emitMetrics(request, status, stats, timings) {
   if (timings.compileE2E != null) {
     ClsiMetrics.e2eCompileDurationSeconds.observe(
       {
-        compileFromHistory: !!request.rawChangeOperations,
+        compileFromHistory: request.isCompileFromHistory,
         compile: request.metricsOpts.compile,
         group: request.compileGroup,
       },

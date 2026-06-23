@@ -13,7 +13,7 @@ services:
       - ./reports:/overleaf/services/history-v1/reports
       - ../../bin/shared/wait_for_it:/overleaf/bin/shared/wait_for_it
     entrypoint: /overleaf/bin/shared/wait_for_it mongo:27017 --timeout=60 --
-    command: npm run test:unit:_run
+    command: yarn run test:unit:_run
     environment:
       CI:
       MONGO_CONNECTION_STRING: mongodb://mongo/test-overleaf
@@ -31,7 +31,6 @@ services:
         condition: service_healthy
 
   test_acceptance:
-    build: .
     image: ci/$PROJECT_NAME:$BRANCH_NAME-$BUILD_NUMBER
     environment:
       CI:
@@ -77,7 +76,7 @@ services:
         condition: service_healthy
     user: node
     entrypoint: /overleaf/bin/shared/wait_for_it mongo:27017 --timeout=60 --
-    command: npm run test:acceptance
+    command: yarn run test:acceptance
 
   tar:
     build: .
@@ -88,7 +87,7 @@ services:
     user: root
 
   redis_test:
-    image: redis:7.4.3
+    image: redis:7.4.8
     healthcheck:
       test: ping="$$(redis-cli ping)" && [ "$$ping" = 'PONG' ]
       interval: 1s
@@ -110,7 +109,7 @@ services:
       - mongo:127.0.0.1
 
   postgres:
-    image: postgres:10
+    image: postgres:14
     environment:
       POSTGRES_USER: overleaf
       POSTGRES_PASSWORD: overleaf
@@ -125,7 +124,7 @@ services:
   certs:
     build:
       dockerfile_inline: |
-        FROM node:24.13.0
+        FROM node:24.14.1
         RUN wget -O /certgen "https://github.com/minio/certgen/releases/download/v1.3.0/certgen-linux-"`dpkg --print-architecture`
         RUN chmod +x /certgen
     volumes:

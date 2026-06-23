@@ -34,8 +34,8 @@ const MAX_ENTRIES_IN_OUTPUT_TAR = 100
 const MAX_BLG_FILES = 50
 const OBJECT_ID_REGEX = /^[0-9a-f]{24}$/
 
-const MIGRATE_FROM = new Date('2026-01-14').getTime()
-const MIGRATE_UNTIL = new Date('2026-01-21').getTime()
+const MIGRATE_FROM = Settings.apis.clsiCache.reshardFrom
+const MIGRATE_UNTIL = Settings.apis.clsiCache.reshardUntil
 
 /**
  * @param {string} projectId
@@ -55,8 +55,7 @@ function getAvailableShard(projectId) {
   const now = Date.now()
   if (
     now > MIGRATE_FROM &&
-    now < MIGRATE_UNTIL &&
-    (counter % 100) / 100 <
+    (counter % 100) / 100 >
       (MIGRATE_UNTIL - now) / (MIGRATE_UNTIL - MIGRATE_FROM)
   ) {
     shards = Settings.apis.clsiCache.shards.slice(
@@ -116,6 +115,7 @@ function closeCircuitBreaker(url) {
  * @param {Record<string, number>} opts.stats
  * @param {Record<string, number>} opts.timings
  * @param {Record<string, any>} opts.options
+ * @param {{path:string,method:string}} opts.metricsOpts
  * @return {string | undefined}
  */
 function notifyCLSICacheAboutBuild({
@@ -128,6 +128,7 @@ function notifyCLSICacheAboutBuild({
   stats,
   timings,
   options,
+  metricsOpts,
 }) {
   if (!Settings.apis.clsiCache.enabled) return undefined
   if (!OBJECT_ID_REGEX.test(projectId)) return undefined
@@ -193,26 +194,34 @@ function notifyCLSICacheAboutBuild({
       })
   }
 
-  // PDF preview
-  enqueue(
-    outputFiles
-      .filter(
-        f =>
-          f.path === 'output.pdf' ||
-          f.path === 'output.log' ||
-          f.path === 'output.synctex.gz'
-      )
-      .concat(
-        outputFiles.filter(f => f.path.endsWith('.blg')).slice(0, MAX_BLG_FILES)
-      )
-      .map(f => {
-        const lean = { path: f.path }
-        if (f.path === 'output.pdf') {
-          Object.assign(lean, _.pick(f, 'path', 'size', 'contentId', 'ranges'))
-        }
-        return lean
-      })
-  )
+  const isUserCompile = !metricsOpts.path
+  if (!(isUserCompile && compileGroup === 'standard')) {
+    // PDF preview, skip for free compiles
+    enqueue(
+      outputFiles
+        .filter(
+          f =>
+            f.path === 'output.pdf' ||
+            f.path === 'output.log' ||
+            f.path === 'output.synctex.gz'
+        )
+        .concat(
+          outputFiles
+            .filter(f => f.path.endsWith('.blg'))
+            .slice(0, MAX_BLG_FILES)
+        )
+        .map(f => {
+          const lean = { path: f.path }
+          if (f.path === 'output.pdf') {
+            Object.assign(
+              lean,
+              _.pick(f, 'path', 'size', 'contentId', 'ranges')
+            )
+          }
+          return lean
+        })
+    )
+  }
 
   // Compile Cache
   buildTarball({ projectId, userId, buildId, outputFiles })

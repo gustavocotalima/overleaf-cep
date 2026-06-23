@@ -77,12 +77,12 @@ function DefaultPageContentWrapper({ children }: { children: ReactNode }) {
 }
 
 function ProjectListPageContent() {
-  useThemedPage('themed-project-dashboard')
+  useThemedPage()
   const { totalProjectsCount, isLoading, loadProgress } =
     useProjectListContext()
 
   useEffect(() => {
-    eventTracking.sendMB('loads_v2_dash', {})
+    eventTracking.sendMB('loads_v2_dash', { page: 'projects' })
   }, [])
 
   const { t } = useTranslation()

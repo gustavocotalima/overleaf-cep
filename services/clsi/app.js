@@ -24,6 +24,8 @@ const PackageController = require('./app/js/PackageController.cjs')
 import net from 'node:net'
 import os from 'node:os'
 import OError from '@overleaf/o-error'
+import ConversionController from './app/js/ConversionController.js'
+import FileUploadMiddleware from './app/js/FileUploadMiddleware.js'
 logger.initialize('clsi')
 logger.logger.serializers.clsiRequest = LoggerSerializers.clsiRequest
 
@@ -126,6 +128,33 @@ app.get(
   OutputController.createOutputZip
 )
 
+// Conversion endpoints
+// Keep old route for backwards compatibility during CLSI/web deploy transition
+app.post(
+  '/convert/docx-to-latex',
+  FileUploadMiddleware.multerMiddleware,
+  (req, res, next) => {
+    req.query.type = 'docx'
+    next()
+  },
+  ConversionController.convertDocumentToLaTeX
+)
+app.post(
+  '/convert/document-to-latex',
+  FileUploadMiddleware.multerMiddleware,
+  ConversionController.convertDocumentToLaTeX
+)
+app.post(
+  '/project/:project_id/user/:user_id/download/project-to-document',
+  bodyParser.json({ limit: Settings.compileSizeLimit }),
+  ConversionController.convertProjectToDocument
+)
+app.post(
+  '/convert/pdf-to-jpeg',
+  FileUploadMiddleware.multerMiddleware,
+  ConversionController.convertPDFToJPEG
+)
+
 if (process.env.NODE_ENV === 'development' && global.__coverage__) {
   app.get('/coverage', (req, res) => {
     const coverage = {}
@@ -180,9 +209,6 @@ function runSmokeTest() {
     setTimeout(runSmokeTest, INTERVAL)
   })
 }
-if (Settings.smokeTest) {
-  runSmokeTest()
-}
 
 app.get('/health_check', function (req, res) {
   if (Settings.processTooOld) {
@@ -194,7 +220,10 @@ app.get('/health_check', function (req, res) {
   smokeTest.sendLastResult(res)
 })
 
-app.get('/smoke_test_force', (req, res) => smokeTest.sendNewResult(res))
+app.get(
+  '/smoke_test_force',
+  async (req, res, next) => await smokeTest.sendNewResult(res).catch(next)
+)
 
 app.use(function (error, req, res, next) {
   if (error instanceof Errors.NotFoundError) {
@@ -309,6 +338,9 @@ if (import.meta.main) {
       logger.fatal({ error }, `Error starting CLSI on ${host}:${port}`)
     } else {
       logger.debug(`CLSI starting up, listening on ${host}:${port}`)
+      if (Settings.smokeTest) {
+        runSmokeTest()
+      }
     }
   })
 

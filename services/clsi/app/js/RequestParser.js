@@ -1,3 +1,4 @@
+import { promisify } from 'node:util'
 import settings from '@overleaf/settings'
 import OutputCacheManager from './OutputCacheManager.js'
 
@@ -63,6 +64,11 @@ function parse(body, callback) {
         default: settings.pdfCachingMinChunkSize,
         type: 'number',
       }
+    )
+    response.enableCheckpoint = _parseAttribute(
+      'enableCheckpoint',
+      compile.options.enableCheckpoint,
+      { default: false, type: 'boolean' }
     )
     response.timeout = _parseAttribute('timeout', compile.options.timeout, {
       default: MAX_TIMEOUT,
@@ -161,6 +167,7 @@ function parse(body, callback) {
     // The snapshot and changes are validated when loading them in editor-core.
     response.rawSnapshot = compile.rawSnapshot
     response.rawChangeOperations = compile.rawChangeOperations
+    response.isCompileFromHistory = !!response.rawChangeOperations
 
     // v1 conversions / submissions
     if (compile.filestoreBlobPrefix) {
@@ -285,4 +292,4 @@ function _checkPath(path) {
   return path
 }
 
-export default { parse, MAX_TIMEOUT }
+export default { parse, MAX_TIMEOUT, promises: { parse: promisify(parse) } }

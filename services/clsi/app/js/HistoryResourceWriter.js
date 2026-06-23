@@ -23,6 +23,8 @@ import OError from '@overleaf/o-error'
 import ClsiMetrics from './Metrics.js'
 import { promiseMapSettledWithLimit } from '@overleaf/promise-utils'
 import Metrics from '@overleaf/metrics'
+import TikzManager from './TikzManager.js'
+import DraftModeManager from './DraftModeManager.js'
 
 const gzip = promisify(zlib.gzip)
 const gunzip = promisify(zlib.gunzip)
@@ -32,31 +34,28 @@ export const clearCacheCb = callbackify(clearCache)
 /**
  * @param {string} projectId
  * @param {string} userId
+ * @param {string} cacheKey
  * @return {Promise<void>}
  */
-export async function clearCache(projectId, userId) {
-  const { dir } = snapshotPath(projectId, userId)
+export async function clearCache(projectId, userId, cacheKey) {
+  const { dir } = snapshotPath(cacheKey)
   try {
     await fs.promises.rm(dir, { recursive: true, force: true })
   } catch (err) {
     if (isENOENT(err)) return
     logger.warn(
-      { err, projectId, userId },
+      { err, projectId, userId, cacheKey },
       'compile from cache: failed to clear history cache'
     )
   }
 }
 
 /**
- * @param {string} projectId
- * @param {string} userId
+ * @param {string} cacheKey
  * @return {{ dir: string, path: string, resyncPath: string }}
  */
-function snapshotPath(projectId, userId) {
-  const dir = Path.join(
-    Settings.path.clsiCacheDir,
-    userId ? `${projectId}-${userId}` : projectId
-  )
+function snapshotPath(cacheKey) {
+  const dir = Path.join(Settings.path.clsiCacheDir, cacheKey)
 
   const path = Path.join(dir, 'history.json.gz')
   const resyncPath = Path.join(dir, 'history-resync.json.gz')
@@ -74,17 +73,19 @@ function isENOENT(err) {
 /**
  * @param {string} projectId
  * @param {string} userId
+ * @param {string} cacheKey
  * @param {number} remoteBaseVersion
  * @param {boolean} populateClsiCache
- * @return {Promise<{rawSnapshot: import('overleaf-editor-core/lib/types.js').RawSnapshot, globalBlobs: string[], fullSync: boolean,localBaseVersion: number}>}
+ * @return {Promise<{rawSnapshot: import('overleaf-editor-core/lib/types.js').RawSnapshot, globalBlobs: string[], fullSync: boolean,localBaseVersion: number, dirty: string[]}>}
  */
 async function loadSnapshot(
   projectId,
   userId,
+  cacheKey,
   remoteBaseVersion,
   populateClsiCache
 ) {
-  const { path, resyncPath } = snapshotPath(projectId, userId)
+  const { path, resyncPath } = snapshotPath(cacheKey)
   let maxLocalBaseVersion = -1
   for (const candidate of [path, resyncPath]) {
     try {
@@ -98,7 +99,7 @@ async function loadSnapshot(
         )
       } else if (!isENOENT(err)) {
         logger.warn(
-          { err, projectId, userId },
+          { err, projectId, userId, cacheKey },
           'compile from cache: cannot read history from disk'
         )
       }
@@ -109,6 +110,7 @@ async function loadSnapshot(
       return await loadSnapshotFromClsiCache(
         projectId,
         userId,
+        cacheKey,
         remoteBaseVersion
       )
     } catch (err) {
@@ -119,7 +121,7 @@ async function loadSnapshot(
         )
       } else if (!isENOENT(err)) {
         logger.warn(
-          { err, projectId, userId },
+          { err, projectId, userId, cacheKey },
           'compile from cache: cannot download from clsi-cache'
         )
       }
@@ -133,11 +135,17 @@ async function loadSnapshot(
 /**
  * @param {string} projectId
  * @param {string} userId
+ * @param {string} cacheKey
  * @param {number} remoteBaseVersion
- * @return {Promise<{rawSnapshot: import('overleaf-editor-core/lib/types.js').RawSnapshot, globalBlobs: string[], fullSync: boolean,localBaseVersion: number}>}
+ * @return {Promise<{rawSnapshot: import('overleaf-editor-core/lib/types.js').RawSnapshot, globalBlobs: string[], fullSync: boolean,localBaseVersion: number, dirty: string[]}>}
  */
-async function loadSnapshotFromClsiCache(projectId, userId, remoteBaseVersion) {
-  const { dir, resyncPath } = snapshotPath(projectId, userId)
+async function loadSnapshotFromClsiCache(
+  projectId,
+  userId,
+  cacheKey,
+  remoteBaseVersion
+) {
+  const { dir, resyncPath } = snapshotPath(cacheKey)
   await fs.promises.mkdir(dir, { recursive: true })
   const ok = await CLSICacheHandler.downloadHistorySnapshot(
     projectId,
@@ -160,38 +168,41 @@ async function loadSnapshotFromClsiCache(projectId, userId, remoteBaseVersion) {
  * @param {string} path
  * @param {number} remoteBaseVersion
  * @param {boolean} fullSync
- * @return {Promise<{rawSnapshot: import('overleaf-editor-core/lib/types.js').RawSnapshot, globalBlobs: string[], localBaseVersion: number, fullSync: boolean}>}
+ * @return {Promise<{rawSnapshot: import('overleaf-editor-core/lib/types.js').RawSnapshot, globalBlobs: string[], localBaseVersion: number, fullSync: boolean, dirty: string[]}>}
  */
 async function loadSnapshotFromFile(path, remoteBaseVersion, fullSync) {
   let blob = await fs.promises.readFile(path)
   blob = await gunzip(blob)
-  const { rawSnapshot, globalBlobs, localBaseVersion } = JSON.parse(
-    blob.toString('utf-8')
-  )
+  const {
+    rawSnapshot,
+    globalBlobs,
+    localBaseVersion,
+    dirty = [], // added later, provide a default value.
+  } = JSON.parse(blob.toString('utf-8'))
   if (localBaseVersion < remoteBaseVersion) {
     throw new Errors.MissingUpdatesError('missing updates', {
       baseHistoryVersion: localBaseVersion,
     })
   }
-  return { rawSnapshot, globalBlobs, localBaseVersion, fullSync }
+  return { rawSnapshot, globalBlobs, localBaseVersion, fullSync, dirty }
 }
 
 /**
- * @param {string} projectId
- * @param {string} userId
+ * @param {string} cacheKey
  * @param {Snapshot} snapshot
  * @param {number} localBaseVersion
  * @param {string[]} globalBlobs
+ * @param {string[]} dirty
  * @return {Promise<void>}
  */
 async function saveSnapshot(
-  projectId,
-  userId,
+  cacheKey,
   snapshot,
   localBaseVersion,
-  globalBlobs
+  globalBlobs,
+  dirty
 ) {
-  const { dir, path } = snapshotPath(projectId, userId)
+  const { dir, path } = snapshotPath(cacheKey)
   await fs.promises.mkdir(dir, { recursive: true })
   const tmp = path + '~'
   await fs.promises.writeFile(
@@ -201,6 +212,7 @@ async function saveSnapshot(
         globalBlobs,
         localBaseVersion,
         rawSnapshot: snapshot.toRaw(),
+        dirty,
       }),
       // use cheapest gzip compression level
       { level: 1 }
@@ -213,16 +225,17 @@ async function saveSnapshot(
 /**
  * @param {string} projectId
  * @param {string} userId
+ * @param {string} cacheKey
  * @return {Promise<void>}
  */
-async function deleteResyncSnapshot(projectId, userId) {
-  const { resyncPath } = snapshotPath(projectId, userId)
+async function deleteResyncSnapshot(projectId, userId, cacheKey) {
+  const { resyncPath } = snapshotPath(cacheKey)
   try {
     await fs.promises.unlink(resyncPath)
   } catch (err) {
     if (!isENOENT(err)) {
       logger.warn(
-        { err, projectId, userId },
+        { err, projectId, userId, cacheKey },
         'compile from cache: failed to clear history-resync.json.gz'
       )
     }
@@ -359,38 +372,44 @@ export async function syncResourcesToDisk(
   compileDir,
   timings
 ) {
+  // - logged in user: <project-id>-<user-id>
+  // - anonymous user: <project-id>
+  // - conversion job: <uuid>
+  const cacheKey = Path.basename(compileDir)
   const remoteBaseVersion = request.baseHistoryVersion
-  let rawSnapshot, globalBlobs, localBaseVersion, source
-  let fullSync = true
+  let rawSnapshot, globalBlobs, localBaseVersion, source, dirty, fullSync
   try {
-    ;({ rawSnapshot, globalBlobs, fullSync, localBaseVersion } =
+    ;({ rawSnapshot, globalBlobs, fullSync, localBaseVersion, dirty } =
       await loadSnapshot(
         projectId,
         userId,
+        cacheKey,
         remoteBaseVersion,
         request.populateClsiCache
       ))
     source = fullSync ? 'clsi-cache' : 'local'
     logger.debug(
-      { projectId, userId, localBaseVersion, remoteBaseVersion },
+      { projectId, userId, cacheKey, localBaseVersion, remoteBaseVersion },
       'compile from cache: using existing snapshot'
     )
   } catch (err) {
     if (!request.rawSnapshot) throw err
     if (!(err instanceof Errors.MissingUpdatesError)) {
       logger.warn(
-        { err, projectId, userId },
+        { err, projectId, userId, cacheKey },
         'compile from cache: bad local history state during full resync'
       )
     }
     logger.debug(
-      { projectId, userId },
+      { projectId, userId, cacheKey },
       'compile from cache: using incoming snapshot'
     )
     source = 'remote'
     localBaseVersion = remoteBaseVersion
     rawSnapshot = request.rawSnapshot
     globalBlobs = []
+    dirty = []
+    fullSync = true
   }
   globalBlobs = Array.from(new Set(globalBlobs.concat(request.globalBlobs)))
 
@@ -415,9 +434,15 @@ export async function syncResourcesToDisk(
   const changedPaths = []
   if (fullSync) {
     changedPaths.push(...snapshot.getFilePathnames())
-    logger.debug({ projectId, userId }, 'compile from cache: full sync')
+    logger.debug(
+      { projectId, userId, cacheKey },
+      'compile from cache: full sync'
+    )
   } else {
-    const dedupe = new Set()
+    const dedupe = new Set(dirty)
+    if (request.draft) {
+      dedupe.add(request.rootResourcePath)
+    }
     for (const change of changes) {
       for (const operation of change.getOperations()) {
         if (operation instanceof AddFileOperation) {
@@ -436,7 +461,7 @@ export async function syncResourcesToDisk(
     }
     changedPaths.push(...dedupe)
     logger.debug(
-      { projectId, userId, changedPaths },
+      { projectId, userId, cacheKey, changedPaths },
       'compile from cache: incremental sync'
     )
   }
@@ -462,6 +487,8 @@ export async function syncResourcesToDisk(
     await ensureHasParentFolder(compileDir, path, entriesDepthFirst)
   }
 
+  const wasDirty = dirty.length > 0
+  dirty = []
   let createCacheFolder
   // Use Promise.allSettled to ensure that all writes have stopped when we exit.
   const allDone = await promiseMapSettledWithLimit(
@@ -471,8 +498,19 @@ export async function syncResourcesToDisk(
       const file = snapshot.getFile(path)
       if (!file) return // deleted, handled by removeExtraneousEntries
 
-      const content = file.getContent({ filterTrackedDeletes: true })
+      let content = file.getContent({ filterTrackedDeletes: true })
       if (typeof content === 'string') {
+        if (path === request.rootResourcePath) {
+          if (request.draft) {
+            content = DraftModeManager.PREFIX + content
+            dirty.push(path)
+          }
+          await TikzManager.writeOutputFileIfNeeded(
+            compileDir,
+            snapshot,
+            content
+          )
+        }
         await fs.promises.writeFile(
           Path.join(compileDir, path),
           content,
@@ -514,17 +552,17 @@ export async function syncResourcesToDisk(
     throw OError.tag(result.reason, 'write failed', { path })
   }
   const baseHistoryVersion = localBaseVersion + changes.length
-  if (fullSync || changes.length) {
+  if (fullSync || changes.length || wasDirty || dirty.length) {
     await saveSnapshot(
-      projectId,
-      userId,
+      cacheKey,
       snapshot,
       baseHistoryVersion,
-      globalBlobs
+      globalBlobs,
+      dirty
     )
   }
   if (fullSync) {
-    await deleteResyncSnapshot(projectId, userId)
+    await deleteResyncSnapshot(projectId, userId, cacheKey)
   }
   return {
     baseHistoryVersion,

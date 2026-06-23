@@ -14,8 +14,8 @@ import RecurlyMetrics from './RecurlyMetrics.mjs'
 /**
  * Updates the email address of a Recurly account
  *
- * @param userId
- * @param newAccountEmail - the new email address to set for the Recurly account
+ * @param {any} userId
+ * @param {any} newAccountEmail - the new email address to set for the Recurly account
  */
 async function updateAccountEmailAddress(userId, newAccountEmail) {
   const data = {
@@ -31,11 +31,16 @@ async function updateAccountEmailAddress(userId, newAccountEmail) {
     })
   }
 
-  const { body } = await RecurlyWrapper.promises.apiRequest({
+  const { response, body } = await RecurlyWrapper.promises.apiRequest({
     url: `accounts/${userId}`,
     method: 'PUT',
     body: requestBody,
+    expect404: true,
   })
+  if (response.status === 404) {
+    // the user has no Recurly account
+    return null
+  }
   return await RecurlyWrapper.promises._parseAccountXml(body)
 }
 
@@ -903,11 +908,10 @@ const RecurlyWrapper = {
   getSubscription: callbackify(promises.getSubscription),
   getSubscriptions: callbackify(promises.getSubscriptions),
   updateAccountEmailAddress: callbackify(promises.updateAccountEmailAddress),
-}
-
-RecurlyWrapper.promises = {
-  ...promises,
-  updateAccountEmailAddress,
+  promises: {
+    ...promises,
+    updateAccountEmailAddress,
+  },
 }
 
 export default RecurlyWrapper

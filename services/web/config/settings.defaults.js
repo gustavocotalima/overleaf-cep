@@ -54,7 +54,9 @@ const defaultTextExtensions = [
   'clo',
   'ldf',
   'rmd',
+  'qmd',
   'lua',
+  'py',
   'gv',
   'mf',
   'yml',
@@ -112,6 +114,8 @@ const httpPermissionsPolicy = {
     'on-device-speech-recognition': 'self',
   },
 }
+
+const safeCompilers = ['xelatex', 'pdflatex', 'latex', 'lualatex']
 
 module.exports = {
   env: 'server-ce',
@@ -228,6 +232,9 @@ module.exports = {
         '127.0.0.1'
       }:3003`,
     },
+    geoIpLookup: {
+      cacheSize: intFromEnv('GEO_IP_LOOKUP_CACHE_SIZE', 10_000),
+    },
     docstore: {
       url: `http://${process.env.DOCSTORE_HOST || '127.0.0.1'}:3016`,
       pubUrl: `http://${process.env.DOCSTORE_HOST || '127.0.0.1'}:3016`,
@@ -240,9 +247,10 @@ module.exports = {
     },
     clsi: {
       url: `http://${process.env.CLSI_HOST || '127.0.0.1'}:3013`,
-      downloadHost: process.env.CLSI_LB_IP
-        ? `http://${process.env.CLSI_LB_IP}:80`
-        : `http://${process.env.DOWNLOAD_HOST || '127.0.0.1'}:8080`,
+      downloadHost:
+        process.env.CLSI_LB_IP || process.env.CLSI_LB_HOST
+          ? `http://${process.env.CLSI_LB_IP || process.env.CLSI_LB_HOST}:80`
+          : `http://${process.env.DOWNLOAD_HOST || '127.0.0.1'}:8080`,
       backendGroupName: undefined,
       submissionBackendClass:
         process.env.CLSI_SUBMISSION_BACKEND_CLASS || 'c3d',
@@ -262,9 +270,6 @@ module.exports = {
     },
     realTime: {
       url: `http://${process.env.REALTIME_HOST || '127.0.0.1'}:3026`,
-    },
-    contacts: {
-      url: `http://${process.env.CONTACTS_HOST || '127.0.0.1'}:3036`,
     },
     linkedUrlProxy: {
       url: `http://${process.env.LINKED_URL_PROXY_HOST || '127.0.0.1'}:3066`,
@@ -332,6 +337,10 @@ module.exports = {
   // Where your instance of Overleaf Community Edition/Server Pro can be found publicly. Used in emails
   // that are sent out, generated links, etc.
   siteUrl: (siteUrl = process.env.PUBLIC_URL || 'http://127.0.0.1:3000'),
+
+  isCodeSpace: process.env.IS_CODE_SPACE === 'true',
+  isDevEnv: process.env.NODE_ENV === 'development',
+  isCI: process.env.NODE_ENV === 'test',
 
   lockManager: {
     lockTestInterval: intFromEnv('LOCK_MANAGER_LOCK_TEST_INTERVAL', 50),
@@ -428,13 +437,33 @@ module.exports = {
 
   // featuresEpoch: 'YYYY-MM-DD',
 
+  personalAccessTokens: {
+    expiry: {
+      warningWindowDays: intFromEnv(
+        'PERSONAL_ACCESS_TOKEN_WARNING_WINDOW_DAYS',
+        2
+      ),
+    },
+  },
+
   features: {
     personal: defaultFeatures,
   },
 
   aiFeatures: {
-    freeTrialQuota: 'basic',
+    freeQuota: 'free',
+    standardQuota: 'standard',
+    basicQuota: 'basic',
     unlimitedQuota: 'unlimited',
+  },
+
+  quotaGrants: {
+    ai: {
+      free: 0,
+      basic: 0,
+      standard: 0,
+      unlimited: 0,
+    },
   },
 
   groupPlanModalOptions: {
@@ -454,6 +483,12 @@ module.exports = {
 
   disableChat: process.env.OVERLEAF_DISABLE_CHAT === 'true',
   disableLinkSharing: process.env.OVERLEAF_DISABLE_LINK_SHARING === 'true',
+  safeCompilers,
+  defaultLatexCompiler: safeCompilers.includes(
+    process.env.DEFAULT_LATEX_COMPILER
+  )
+    ? process.env.DEFAULT_LATEX_COMPILER
+    : 'pdflatex',
   enableSubscriptions: false,
   restrictedCountries: [],
   enableOnboardingEmails: process.env.ENABLE_ONBOARDING_EMAILS === 'true',
@@ -738,11 +773,11 @@ module.exports = {
 
   // Maximum Delay before sending comment mention notifications
   notificationMaxDelay:
-    parseInt(process.env.COMMENT_MENTION_DELAY_MINUTES) || 30 * 60 * 1000, // 30 minutes
+    parseInt(process.env.COMMENT_MENTION_DELAY_MS) || 30 * 60 * 1000, // 30 minutes
 
   // Comment mention notifications will wait at least this long before being sent
   notificationMinDelay:
-    parseInt(process.env.COMMENT_MENTION_DELAY_MINUTES) || 10 * 60 * 1000, // 10 minutes
+    parseInt(process.env.COMMENT_MENTION_DELAY_MS) || 10 * 60 * 1000, // 10 minutes
 
   // Maximum JSON size in HTTP requests
   // We should be able to process twice the max doc length, to allow for
@@ -1028,6 +1063,7 @@ module.exports = {
     ],
     contactUsModal: [],
     sourceEditorExtensions: [],
+    sourceEditorVisualExtensions: [],
     sourceEditorComponents: [],
     pdfLogEntryHeaderActionComponents: [],
     pdfLogEntryComponents: [],
@@ -1041,6 +1077,8 @@ module.exports = {
         '../modules/symbol-palette/frontend/components/symbol-palette'
       ),
     ],
+    sourceEditorToolbarStartButtons: [],
+    sourceEditorToolbarButtonGroups: [],
     sourceEditorToolbarComponents: [],
     sourceEditorToolbarEndButtons: [],
     rootContextProviders: [],
@@ -1051,17 +1089,33 @@ module.exports = {
       ),
     ],
     mainEditorLayoutPanels: [],
+    pythonRunner: [],
     langFeedbackLinkingWidgets: [],
     labsExperiments: [],
-    integrationLinkingWidgets: [],
+    integrationLinkingWidgets: [
+      Path.resolve(
+        __dirname,
+        '../modules/github-sync/frontend/js/components/github-sync-widget.tsx'
+      ),
+    ],
     referenceLinkingWidgets: [
       Path.resolve(
         __dirname,
         '../modules/zotero/frontend/js/components/zotero-widget'
       ),
     ],
-    importProjectFromGithubModalWrapper: [],
-    importProjectFromGithubMenu: [],
+    importProjectFromGithubModalWrapper: [
+      Path.resolve(
+        __dirname,
+        '../modules/github-sync/frontend/js/components/import-from-github-modal-wrapper.tsx'
+      ),
+    ],
+    importProjectFromGithubMenu: [
+      Path.resolve(
+        __dirname,
+        '../modules/github-sync/frontend/js/components/import-from-github-menu.tsx'
+      ),
+    ],
     editorLeftMenuSync: [
       Path.resolve(
         __dirname,
@@ -1080,6 +1134,7 @@ module.exports = {
         '../modules/template-gallery/frontend/js/features/template/components/menubar-manage-template'
       ),
     ],
+    insertMenuSections: [],
     oauth2Server: [
       Path.resolve(
         __dirname,
@@ -1130,11 +1185,17 @@ module.exports = {
     integrationPanelComponents: [
       Path.resolve(
         __dirname,
+        '../modules/github-sync/frontend/js/components/github-integration-card.tsx'
+      ),
+      Path.resolve(
+        __dirname,
         '../modules/git-bridge/frontend/js/card/components/git-integration-card.tsx'
       ),
     ],
     referenceSearchSetting: [],
-    errorLogsComponents: [],
+    settingsModalEditorTabSections: [],
+    settingsModalSpellcheckSections: [],
+    editorFloatingMenuActions: [],
     referenceIndices: [
       Path.resolve(
         __dirname,
@@ -1143,6 +1204,8 @@ module.exports = {
     ],
     railEntries: [],
     railPopovers: [],
+    railActions: [],
+    railModals: [],
   },
 
   moduleImportSequence: [
@@ -1159,6 +1222,7 @@ module.exports = {
     'admin-tools', // import after authentication
     'template-gallery',
     'git-bridge',
+    'github-sync',
     'zotero',
     'google-drive-backup',
   ],
@@ -1176,7 +1240,7 @@ module.exports = {
   },
   unsupportedBrowsers: {
     ie: '<=11',
-    safari: '<=14',
+    safari: '<15',
     firefox: '<=78',
   },
 
@@ -1186,6 +1250,8 @@ module.exports = {
   managedUsers: {
     enabled: false,
   },
+
+  enablePandocConversions: process.env.ENABLE_PANDOC_CONVERSIONS === 'true',
 
   oauthProviders: {
     ...(process.env.EXTERNAL_AUTH && process.env.EXTERNAL_AUTH.includes('oidc') && {

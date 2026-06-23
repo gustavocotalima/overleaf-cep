@@ -1,7 +1,8 @@
-import { callbackify } from 'node:util'
+import { callbackify, callbackifyMultiResult } from '@overleaf/promise-utils'
 import {
   fetchJson,
   fetchNothing,
+  fetchStream,
   fetchStreamWithResponse,
   RequestFailedError,
 } from '@overleaf/fetch-utils'
@@ -57,6 +58,17 @@ async function initializeProject(projectId) {
     throw new OError('project-history did not provide an id', { body })
   }
   return historyId
+}
+
+async function cloneProject(sourceProjectId, targetProjectId) {
+  return await fetchStream(
+    `${settings.apis.project_history.url}/project/${sourceProjectId}/clone`,
+    {
+      method: 'POST',
+      json: { targetProjectId },
+      signal: AbortSignal.timeout(10 * 60_000),
+    }
+  )
 }
 
 async function flushProject(projectId) {
@@ -194,6 +206,7 @@ async function requestBlob(historyId, hash, method = 'GET', range = '') {
   try {
     ;({ stream, response } = await fetchStreamWithResponse(url, {
       ...opts,
+      signal: AbortSignal.timeout(10 * 60 * 1000),
       basicAuth: {
         user: settings.apis.v1_history.user,
         password: settings.apis.v1_history.pass,
@@ -287,6 +300,41 @@ async function getLatestHistoryWithHistoryId(historyId) {
     {
       basicAuth: HISTORY_V1_BASIC_AUTH,
     }
+  )
+}
+
+/**
+ * Get the latest chunk from history using already resolved historyId
+ *
+ * @param {string} historyId
+ */
+async function getLatestZipWithHistoryId(historyId) {
+  const { response, stream } = await fetchStreamWithResponse(
+    `${HISTORY_V1_URL}/projects/${historyId}/latest/zip`,
+    {
+      basicAuth: HISTORY_V1_BASIC_AUTH,
+      signal: AbortSignal.timeout(10 * 60 * 1000),
+    }
+  )
+  return { stream, historyVersion: response.headers.get('X-History-Version') }
+}
+
+async function ensureNoResyncPending(projectId) {
+  const { resyncPending } = await fetchJson(
+    `${settings.apis.project_history.url}/project/${projectId}/resync-pending`
+  )
+  if (resyncPending) throw new OError('broken history with pending resync')
+}
+
+async function getDebugInfo(projectId) {
+  return await fetchJson(
+    `${settings.apis.project_history.url}/project/${projectId}/debug-info`
+  )
+}
+
+async function getHistoryFailures() {
+  return await fetchJson(
+    `${settings.apis.project_history.url}/status/failures-full`
   )
 }
 
@@ -443,9 +491,14 @@ export default {
   requestBlob: callbackify(requestBlob),
   requestBlobWithProjectId: callbackify(requestBlobWithProjectId),
   getLatestHistory: callbackify(getLatestHistory),
+  getLatestZipWithHistoryId: callbackifyMultiResult(getLatestZipWithHistoryId, [
+    'stream',
+    'historyVersion',
+  ]),
   getChanges: callbackify(getChanges),
   promises: {
     initializeProject,
+    cloneProject,
     flushProject,
     resyncProject,
     deleteProject,
@@ -458,10 +511,14 @@ export default {
     requestBlob,
     requestBlobWithProjectId,
     getLatestHistory,
+    getLatestZipWithHistoryId,
     getChanges,
     getChangesWithHistoryId,
     getProjectBlobStats,
     getBlobStats,
     getLatestHistoryWithHistoryId,
+    ensureNoResyncPending,
+    getDebugInfo,
+    getHistoryFailures,
   },
 }

@@ -1,6 +1,13 @@
-import type { StorybookConfig } from '@storybook/react-webpack5'
-import path from 'node:path'
+// This file has been automatically migrated to valid ESM format by Storybook.
+import { fileURLToPath } from 'node:url'
+import { createRequire } from 'node:module'
+import { defineMain } from '@storybook/react-webpack5/node'
+import path, { dirname } from 'node:path'
 import MiniCssExtractPlugin from 'mini-css-extract-plugin'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
+const require = createRequire(import.meta.url)
 
 const rootDir = path.resolve(__dirname, '..')
 
@@ -16,21 +23,22 @@ function getAbsolutePath(value: string): any {
 const invalidateBabelCacheIfNeeded = require('../frontend/macros/invalidate-babel-cache-if-needed')
 invalidateBabelCacheIfNeeded()
 
-const config: StorybookConfig = {
+export default defineMain({
   core: {
     disableTelemetry: true,
   },
+
   staticDirs: [path.join(rootDir, 'public')],
+
   stories: [
     path.join(rootDir, 'frontend/stories/**/*.stories.{js,jsx,ts,tsx}'),
     path.join(rootDir, 'modules/**/stories/**/*.stories.{js,jsx,ts,tsx}'),
     path.join(rootDir, 'frontend/stories/**/*.mdx'),
     path.join(rootDir, 'modules/**/stories/**/*.mdx'),
   ],
+
   addons: [
     getAbsolutePath('@storybook/addon-links'),
-    getAbsolutePath('@storybook/addon-essentials'),
-    getAbsolutePath('@storybook/addon-interactions'),
     getAbsolutePath('@storybook/addon-a11y'),
     getAbsolutePath('@storybook/addon-designs'),
     getAbsolutePath('@storybook/addon-webpack5-compiler-babel'),
@@ -76,14 +84,14 @@ const config: StorybookConfig = {
         plugins: [new MiniCssExtractPlugin()],
       },
     },
+    getAbsolutePath('@storybook/addon-docs'),
   ],
+
   framework: {
     name: getAbsolutePath('@storybook/react-webpack5'),
     options: {},
   },
-  docs: {
-    autodocs: 'tag',
-  },
+
   babel: (options: Record<string, any>) => {
     return {
       ...options,
@@ -95,6 +103,7 @@ const config: StorybookConfig = {
       ],
     }
   },
+
   webpackFinal: storybookConfig => {
     return {
       ...storybookConfig,
@@ -113,6 +122,7 @@ const config: StorybookConfig = {
           // custom prefixes for import paths
           '@': path.join(rootDir, 'frontend/js/'),
           '@ol-types': path.join(rootDir, 'types/'),
+          '@ol-storybook': path.join(rootDir, '.storybook/'),
           '@wf': path.join(
             rootDir,
             'modules/writefull/frontend/js/integration/src/'
@@ -121,15 +131,28 @@ const config: StorybookConfig = {
       },
       module: {
         ...storybookConfig.module,
-        rules: (storybookConfig.module?.rules ?? []).concat({
-          test: /\.wasm$/,
-          type: 'asset/resource',
-          generator: {
-            filename: 'js/[name]-[contenthash][ext]',
+        rules: (storybookConfig.module?.rules ?? []).concat(
+          {
+            test: /\.wasm$/,
+            type: 'asset/resource',
+            generator: {
+              filename: 'js/[name]-[contenthash][ext]',
+            },
           },
-        }),
+          {
+            // Disable webpack's `new URL()` processing for pdfjs-dist worker
+            // files, so that webpack does not try to resolve qcms_bg.wasm and
+            // openjpeg.wasm (which live in pdfjs-dist/wasm/, not build/).
+            // The main webpack build relies on a `/* webpackIgnore: true */`
+            // comment (via yarn patch) to achieve the same effect, but
+            // storybook's babel pipeline may strip comments from the 1.9 MB
+            // worker file (babel `compact: "auto"` removes comments for files
+            // > 500 KB), so we disable URL parsing for these files instead.
+            test: /pdfjs-dist.*pdf\.worker.*\.m?js$/,
+            parser: { javascript: { url: false } },
+          }
+        ),
       },
     }
   },
-}
-export default config
+})

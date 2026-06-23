@@ -2,7 +2,7 @@ const Path = require('node:path')
 const os = require('node:os')
 const fs = require('node:fs')
 
-const isPreEmptible = process.env.PREEMPTIBLE === 'TRUE'
+const isSpotInstance = process.env.PREEMPTIBLE === 'TRUE'
 const CLSI_SERVER_ID = os.hostname().replace('-ctr', '')
 
 module.exports = {
@@ -20,10 +20,22 @@ module.exports = {
       process.env.CLSI_OUTPUT_PATH || Path.resolve(__dirname, '../output'),
     clsiCacheDir:
       process.env.CLSI_CACHE_PATH || Path.resolve(__dirname, '../cache'),
+    uploadFolder:
+      process.env.CLSI_UPLOAD_PATH || Path.resolve(__dirname, '../uploads'),
     synctexBaseDir(projectId) {
       return Path.join(this.compilesDir, projectId)
     },
   },
+
+  conversionTimeoutSeconds:
+    parseInt(process.env.CLSI_CONVERSION_TIMEOUT_SECONDS, 10) || 60,
+  pandocImage: process.env.PANDOC_IMAGE || 'quay.io/sharelatex/pandoc:3.9',
+  enablePandocConversions: process.env.ENABLE_PANDOC_CONVERSIONS === 'true',
+  pdftocairoImage:
+    process.env.PDFTOCAIRO_IMAGE || 'quay.io/sharelatex/pdftocairo:24.02',
+  enablePdfConversions: process.env.ENABLE_PDF_CONVERSIONS === 'true',
+  maxUploadSize: 50 * 1024 * 1024,
+  preciousFilePattern: process.env.PRECIOUS_FILE_PATTERN || '',
 
   internal: {
     clsi: {
@@ -48,6 +60,9 @@ module.exports = {
       // External url prefix for output files, e.g. for requests via load-balancers.
       outputUrlPrefix: `${process.env.ZONE ? `/zone/${process.env.ZONE}` : ''}`,
       clsiServerId: process.env.CLSI_SERVER_ID || CLSI_SERVER_ID,
+      instanceType: process.env.INSTANCE_TYPE,
+      zone: process.env.ZONE,
+      isSpotInstance,
 
       downloadHost: process.env.DOWNLOAD_HOST || 'http://localhost:8080',
     },
@@ -61,6 +76,10 @@ module.exports = {
       shards: JSON.parse(process.env.CLSI_CACHE_INSTANCES || '[]').filter(
         ({ zone, readOnly }) => zone === process.env.ZONE && !readOnly
       ),
+      currentShards: parseInt(process.env.CLSI_CACHE_CURRENT_SHARDS, 10),
+      desiredShards: parseInt(process.env.CLSI_CACHE_DESIRED_SHARDS, 10),
+      reshardFrom: new Date(process.env.CLSI_CACHE_RESHARD_FROM),
+      reshardUntil: new Date(process.env.CLSI_CACHE_RESHARD_UNTIL),
     },
     filestore: {
       url:
@@ -89,7 +108,7 @@ module.exports = {
     parseInt(process.env.PDF_CACHING_WORKER_POOL_SIZE, 10) || 4,
   pdfCachingWorkerPoolBackLogLimit:
     parseInt(process.env.PDF_CACHING_WORKER_POOL_BACK_LOG_LIMIT, 10) || 40,
-  compileConcurrencyLimit: isPreEmptible ? 32 : 64,
+  compileConcurrencyLimit: isSpotInstance ? 32 : 64,
   performanceLogSamplingPercentage:
     parseFloat(process.env.CLSI_PERFORMANCE_LOG_SAMPLING, 10) || 0,
 }
@@ -148,6 +167,7 @@ if ((process.env.DOCKER_RUNNER || process.env.SANDBOXED_COMPILES) === 'true') {
       wordcount: { 'HostConfig.AutoRemove': true },
       synctex: { 'HostConfig.AutoRemove': true },
       'synctex-output': { 'HostConfig.AutoRemove': true },
+      conversions: { 'HostConfig.AutoRemove': true },
     }
     module.exports.clsi.docker.compileGroupConfig = Object.assign(
       defaultCompileGroupConfig,

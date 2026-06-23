@@ -1,4 +1,4 @@
-import { User, Features } from '../../../types/user'
+import { User, Features, FeatureUsage } from '../../../types/user'
 import { User as MinimalUser } from '../../../types/admin/user'
 import { User as ManagedUser } from '../../../types/group-management/user'
 import { UserSettings } from '../../../types/user-settings'
@@ -7,6 +7,7 @@ import { ExposedSettings } from '../../../types/exposed-settings'
 import {
   type ImageName,
   OverallThemeMeta,
+  ProjectCompiler,
   type SpellCheckLanguage,
 } from '../../../types/project-settings'
 import { CurrencyCode } from '../../../types/subscription/currency'
@@ -63,13 +64,13 @@ import { SubscriptionCreationPreview } from '../../../types/subscription/subscri
 import { DefaultNavbarMetadata } from '@/shared/components/types/default-navbar-metadata'
 import { FooterMetadata } from '@/shared/components/types/footer-metadata'
 import type { ScriptLogType } from '../../../modules/admin-panel/frontend/js/features/script-logs/script-log'
-import { ActiveExperiment } from './labs-utils'
 import { Subscription as AdminSubscription } from '../../../types/admin/subscription'
 import { AdminCapability } from '../../../types/admin-capabilities'
 import { AlgoliaConfig } from '../../../modules/algolia-search/frontend/js/types'
 import { WritefullPublicEnv } from '@wf/domain/writefull-public-env'
 import { UserNotificationPreferences } from '../../../types/notifications'
 import { SharingPermissions } from '../../../modules/sharing-permissions/app/src/types'
+import { FullHistoryFailure } from '@ol-types/history/projectHistory'
 
 export interface Meta {
   'ol-ExposedSettings': ExposedSettings
@@ -114,13 +115,16 @@ export interface Meta {
   'ol-csrfToken': string
   'ol-currentInstitutionsWithLicence': Institution[]
   'ol-currentManagedUserAdminEmail': string
+  'ol-currentPlanCode': string | null
   'ol-currentUrl': string
   'ol-customerIoEnabled': boolean
   'ol-debugPdfDetach': boolean
+  'ol-defaultLatexCompiler': ProjectCompiler
   'ol-detachRole': 'detached' | 'detacher' | ''
   'ol-dictionariesRoot': 'string'
   'ol-domainCaptureEnabled': boolean | undefined
   'ol-domainCaptureTestURL': string | undefined
+  'ol-domainVerificationGracePeriodDays': number
   'ol-domainVerificationUIEnabled': boolean
   'ol-dropbox': { error: boolean; registered: boolean }
   'ol-editorThemes': { name: string; dark: boolean }[]
@@ -129,9 +133,9 @@ export interface Meta {
   'ol-error': { name: string } | undefined
   'ol-errorType': string | undefined
   'ol-expired': boolean
+  'ol-featureUsage': FeatureUsage
   'ol-features': Features
   'ol-footer': FooterMetadata
-  'ol-fromPlansPage': boolean
   'ol-galleryTagName': string
   'ol-gitBridgeEnabled': boolean
   'ol-gitBridgePublicBaseUrl': string
@@ -154,6 +158,7 @@ export interface Meta {
   'ol-groupSubscriptionsPendingEnrollment': PendingGroupSubscriptionEnrollment[]
   'ol-groupsAndEnterpriseBannerVariant': GroupsAndEnterpriseBannerVariant
   'ol-hasAiAssistViaWritefull': boolean
+  'ol-hasAiFreeTier': boolean
   'ol-hasGroupSSOFeature': boolean
   'ol-hasIndividualPaidSubscription': boolean
   'ol-hasManagedUsersFeature': boolean
@@ -162,6 +167,7 @@ export interface Meta {
   'ol-hasSplitTestWriteAccess': boolean
   'ol-hasSubscription': boolean
   'ol-hasTrackChangesFeature': boolean
+  'ol-hasUnlimitedAi': boolean
   'ol-hasWriteAccess': boolean
   'ol-hideLinkingWidgets': boolean // CI only
   'ol-historyBlobStats': {
@@ -184,17 +190,28 @@ export interface Meta {
   'ol-isCollectionMethodManual': boolean
   'ol-isExternalAuthenticationSystemUsed': boolean
   'ol-isManagedAccount': boolean
+  'ol-isManagedGroupAdmin': boolean
   'ol-isProfessional': boolean
   'ol-isRegisteredViaGoogle': boolean
   'ol-isRestrictedTokenMember': boolean
   'ol-isSaas': boolean
+  'ol-isUpgrade': boolean
   'ol-isUserGroupManager': boolean
   'ol-itm_campaign': string
   'ol-itm_content': string
   'ol-itm_referrer': string
   'ol-joinedGroupName': string
   'ol-labs': boolean
-  'ol-labsExperiments': ActiveExperiment[] | undefined
+  'ol-labsExperiments': Array<{
+    name: string
+    title: string
+    description: string
+    icon: string
+    surveyLink: string
+    isFull: boolean
+    optedIn: boolean
+    versionCreatedAt: string | null
+  }>
   'ol-languages': SpellCheckLanguage[]
   'ol-learnedWords': string[]
   'ol-legacyEditorThemes': { name: string; dark: boolean }[]
@@ -223,7 +240,6 @@ export interface Meta {
   'ol-notificationsInstitution': InstitutionType[]
   'ol-oauthProviders': OAuthProviders
   'ol-odcData': OnboardingFormData
-  'ol-onAiFreeTrial': boolean
   'ol-otMigrationStage': number
   'ol-overallThemes': OverallThemeMeta[]
   'ol-ownerIsManaged': boolean
@@ -244,6 +260,7 @@ export interface Meta {
   'ol-primaryEmail': { email: string; confirmed: boolean }
   'ol-project': any // TODO
   'ol-projectEntityCounts': { files: number; docs: number }
+  'ol-projectHistoryFailures': FullHistoryFailure[]
   'ol-projectName': string
   'ol-projectSyncSuccessMessage': string
   'ol-projectTags': Tag[]
@@ -274,6 +291,7 @@ export interface Meta {
   'ol-shouldAllowEditingDetails': boolean
   'ol-shouldLoadHotjar': boolean
   'ol-showAiFeatures': boolean
+  'ol-showAiFeaturesDisabled': boolean
   'ol-showCouponField': boolean
   'ol-showGroupDiscount': boolean
   'ol-showGroupsAndEnterpriseBanner': boolean

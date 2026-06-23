@@ -6,7 +6,6 @@ import Settings from '@overleaf/settings'
 import AuthenticationController from '../Authentication/AuthenticationController.mjs'
 import SessionManager from '../Authentication/SessionManager.mjs'
 import SubscriptionLocator from '../Subscription/SubscriptionLocator.mjs'
-import UserAnalyticsIdCache from '../Analytics/UserAnalyticsIdCache.mjs'
 import _ from 'lodash'
 import { expressify } from '@overleaf/promise-utils'
 import Features from '../../infrastructure/Features.mjs'
@@ -116,7 +115,11 @@ async function settingsPage(req, res) {
   }
 
   await SplitTestHandler.promises.getAssignment(req, res, 'email-notifications')
-
+  await SplitTestHandler.promises.getAssignment(
+    req,
+    res,
+    'domain-captured-by-group'
+  )
   res.render('user/settings', {
     title: 'account_settings',
     user: {
@@ -215,14 +218,15 @@ async function emailPreferencesPage(req, res) {
 
   let subscribed = false
 
-  const analyticsId = await UserAnalyticsIdCache.get(userId)
-  if (analyticsId) {
+  try {
     const [preferences] = await Modules.promises.hooks.fire(
       'getSubscriptionPreferences',
-      analyticsId
+      userId
     )
 
     subscribed = Boolean(preferences?.newsletter)
+  } catch (err) {
+    logger.error({ err, userId }, 'Error fetching newsletter subscription')
   }
 
   res.render('user/email-preferences', {
