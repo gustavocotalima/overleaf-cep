@@ -36,9 +36,11 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ARG TEXLIVE_MIRROR=https://mirror.ctan.org/systems/texlive/tlnet
 ARG TEXLIVE_YEAR=2026
 ARG BEAMER_VERSION=3.77
+ARG BABEL_SPANISH_VERSION=5.0q
 
 LABEL org.opencontainers.image.texlive.version="${TEXLIVE_YEAR}" \
-      org.opencontainers.image.beamer.version="${BEAMER_VERSION}"
+      org.opencontainers.image.beamer.version="${BEAMER_VERSION}" \
+      org.opencontainers.image.babel-spanish.version="${BABEL_SPANISH_VERSION}"
 
 RUN mkdir /install-tl-unx \
 &&  wget --quiet https://tug.org/texlive/files/texlive.asc \
@@ -66,10 +68,13 @@ RUN mkdir /install-tl-unx \
       etoolbox \
       xetex \
       beamer \
+      babel-spanish \
 &&  test -d "/usr/local/texlive/${TEXLIVE_YEAR}" \
 &&  test "$(tlmgr info --only-installed beamer | sed -n 's/^cat-version:[[:space:]]*//p')" = "${BEAMER_VERSION}" \
+&&  test "$(tlmgr info --only-installed babel-spanish | sed -n 's/^cat-version:[[:space:]]*//p')" = "${BABEL_SPANISH_VERSION}" \
 &&  mktexlsr "/usr/local/texlive/${TEXLIVE_YEAR}/texmf-dist" \
 &&  test -n "$(kpsewhich beamer.cls)" \
+&&  test -n "$(kpsewhich spanish.ldf)" \
 &&  tlmgr path add \
 &&  rm -rf /install-tl-unx \
 &&  chown -R www-data:www-data /usr/local/texlive
