@@ -5,7 +5,7 @@
 # to avoid dependency on pre-built Docker Hub images
 # ---------------------------------------------
 
-FROM phusion/baseimage:noble-1.0.3
+FROM phusion/baseimage:noble-1.0.3@sha256:a41c29cc5cbd77c2acf742382db9b0254e3b3d17fd4220e91df47a220ca9eb9e
 
 # Makes sure LuaTex cache is writable
 ENV TEXMFVAR=/var/lib/overleaf/tmp/texmf-var
@@ -34,6 +34,11 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 # Install TexLive
 ARG TEXLIVE_MIRROR=https://mirror.ctan.org/systems/texlive/tlnet
+ARG TEXLIVE_YEAR=2026
+ARG BEAMER_VERSION=3.77
+
+LABEL org.opencontainers.image.texlive.version="${TEXLIVE_YEAR}" \
+      org.opencontainers.image.beamer.version="${BEAMER_VERSION}"
 
 RUN mkdir /install-tl-unx \
 &&  wget --quiet https://tug.org/texlive/files/texlive.asc \
@@ -60,6 +65,11 @@ RUN mkdir /install-tl-unx \
       synctex \
       etoolbox \
       xetex \
+      beamer \
+&&  test -d "/usr/local/texlive/${TEXLIVE_YEAR}" \
+&&  test "$(tlmgr info --only-installed beamer | sed -n 's/^cat-version:[[:space:]]*//p')" = "${BEAMER_VERSION}" \
+&&  mktexlsr "/usr/local/texlive/${TEXLIVE_YEAR}/texmf-dist" \
+&&  test -n "$(kpsewhich beamer.cls)" \
 &&  tlmgr path add \
 &&  rm -rf /install-tl-unx \
 &&  chown -R www-data:www-data /usr/local/texlive
