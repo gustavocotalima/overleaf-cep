@@ -35,7 +35,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Install TexLive
 ARG TEXLIVE_MIRROR=https://mirror.ctan.org/systems/texlive/tlnet
 ARG TEXLIVE_YEAR=2026
-ARG BEAMER_VERSION=3.77
+ARG BEAMER_VERSION=3.78
 ARG BABEL_SPANISH_VERSION=5.0q
 
 LABEL org.opencontainers.image.texlive.version="${TEXLIVE_YEAR}" \
