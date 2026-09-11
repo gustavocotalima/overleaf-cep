@@ -252,8 +252,12 @@ module.exports = {
           ? `http://${process.env.CLSI_LB_IP || process.env.CLSI_LB_HOST}:80`
           : `http://${process.env.DOWNLOAD_HOST || '127.0.0.1'}:8080`,
       backendGroupName: undefined,
-      submissionBackendClass:
-        process.env.CLSI_SUBMISSION_BACKEND_CLASS || 'c3d',
+      submissionCompileBackendClass:
+        process.env.CLSI_SUBMISSION_COMPILE_BACKEND_CLASS || 'free',
+      standardCompileBackendClass:
+        process.env.CLSI_STANDARD_COMPILE_BACKEND_CLASS || 'free',
+      priorityCompileBackendClass:
+        process.env.CLSI_PRIORITY_COMPILE_BACKEND_CLASS || 'premium',
     },
     clsiCache: {
       instances: JSON.parse(process.env.CLSI_CACHE_INSTANCES || '[]'),
@@ -276,9 +280,6 @@ module.exports = {
     },
     notifications: {
       url: `http://${process.env.NOTIFICATIONS_HOST || '127.0.0.1'}:3042`,
-    },
-    references: {
-      url: `http://${process.env.REFERENCES_HOST || '127.0.0.1'}:3056`,
     },
     webpack: {
       url: `http://${process.env.WEBPACK_HOST || '127.0.0.1'}:3808`,
@@ -1116,18 +1117,8 @@ module.exports = {
         '../modules/github-sync/frontend/js/components/import-from-github-menu.tsx'
       ),
     ],
-    editorLeftMenuSync: [
-      Path.resolve(
-        __dirname,
-        '../modules/git-bridge/frontend/js/card/components/git-modal.tsx'
-      ),
-    ],
-    editorLeftMenuManageTemplate: [
-      Path.resolve(
-        __dirname,
-        '../modules/template-gallery/frontend/js/features/template/components/actions-manage-template'
-      ),
-    ],
+    editorLeftMenuSync: [],
+    editorLeftMenuManageTemplate: [],
     menubarExtraComponents: [
       Path.resolve(
         __dirname,
@@ -1191,11 +1182,16 @@ module.exports = {
         __dirname,
         '../modules/git-bridge/frontend/js/card/components/git-integration-card.tsx'
       ),
+      Path.resolve(
+        __dirname,
+        '../modules/zotero/frontend/js/components/zotero-integration-card.tsx'
+      ),
     ],
     referenceSearchSetting: [],
     settingsModalEditorTabSections: [],
     settingsModalSpellcheckSections: [],
     editorFloatingMenuActions: [],
+    errorLogsComponents: [],
     referenceIndices: [
       Path.resolve(
         __dirname,
@@ -1220,6 +1216,7 @@ module.exports = {
     'authentication/saml',
     'authentication/oidc',
     'admin-tools', // import after authentication
+    'registration-page', // import after authentication
     'template-gallery',
     'git-bridge',
     'github-sync',
@@ -1267,8 +1264,15 @@ module.exports = {
   },
 
   splitTestOverrides: {
-    ...(process.env.OVERLEAF_THEMED_DASHBOARD?.toLowerCase() === 'true' ? {
-      'themed-project-dashboard': 'enabled',
+    ...(process.env.ENABLE_EDITOR_TABS?.toLowerCase() === 'true' ? {
+      'editor-tabs': 'enabled',
+    } : {}),
+    ...(process.env.ENABLE_PANDOC_CONVERSIONS === 'true' ? {
+      'import-docx': 'enabled',
+      'import-markdown': 'enabled',
+      'export-docx': 'enabled',
+      'export-html': 'enabled',
+      'export-markdown': 'enabled',
     } : {}),
     ...(process.env.OVERLEAF_HISTORY_RESTORE?.toLowerCase() === 'true' ? {
       'history-ranges-support': 'enabled',

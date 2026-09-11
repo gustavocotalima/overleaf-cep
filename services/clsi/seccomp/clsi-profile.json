@@ -126,6 +126,11 @@
             "args": []
         },
         {
+             "name": "faccessat2",
+             "action": "SCMP_ACT_ALLOW",
+             "args": []
+        },
+        {
             "name": "fadvise64",
             "action": "SCMP_ACT_ALLOW",
             "args": []
@@ -851,7 +856,17 @@
             "args": []
         },
         {
+            "name": "epoll_wait",
+            "action": "SCMP_ACT_ALLOW",
+            "args": []
+        },
+        {
             "name": "epoll_pwait",
+            "action": "SCMP_ACT_ALLOW",
+            "args": []
+        },
+        {
+            "name": "epoll_pwait2",
             "action": "SCMP_ACT_ALLOW",
             "args": []
         },
@@ -861,19 +876,39 @@
             "args": []
         },
         {
-            "name": "openat2",
+            "name": "ppoll",
             "action": "SCMP_ACT_ALLOW",
             "args": []
         },
         {
-            "name": "statx",
+            "name": "epoll_create",
             "action": "SCMP_ACT_ALLOW",
             "args": []
         },
         {
-            "name": "clone3",
+            "name": "epoll_create1",
             "action": "SCMP_ACT_ALLOW",
-             "args": []
+            "args": []
+        },
+        {
+            "name": "epoll_ctl",
+            "action": "SCMP_ACT_ALLOW",
+            "args": []
+        },
+        {
+            "name": "timerfd_create",
+            "action": "SCMP_ACT_ALLOW",
+            "args": []
+        },
+        {
+            "name": "timerfd_settime",
+            "action": "SCMP_ACT_ALLOW",
+            "args": []
+        },
+        {
+            "name": "eventfd2",
+            "action": "SCMP_ACT_ALLOW",
+            "args": []
         }
     ]
 }

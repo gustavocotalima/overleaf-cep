@@ -71,9 +71,9 @@ export const RailLayout = () => {
   const { features } = useProjectContext()
   const { isRestrictedTokenMember } = useEditorContext()
   const gitBridgeEnabled = getMeta('ol-gitBridgeEnabled')
-  const { isOverleaf } = getMeta('ol-ExposedSettings')
+  const { isOverleaf, githubSyncEnabled, zoteroEnabled } = getMeta('ol-ExposedSettings')
 
-  const { view, setLeftMenuShown, focusMode } = useLayoutContext()
+  const { view, setSettingsShown, focusMode } = useLayoutContext()
 
   const { markMessagesAsRead } = useChatContext()
 
@@ -119,7 +119,7 @@ export const RailLayout = () => {
         icon: 'integration_instructions',
         title: t('integrations'),
         component: <IntegrationsPanel />,
-        hide: !isOverleaf && !gitBridgeEnabled,
+        hide: !isOverleaf && !gitBridgeEnabled && !githubSyncEnabled && !zoteroEnabled,
       },
       {
         key: 'review-panel',
@@ -148,6 +148,8 @@ export const RailLayout = () => {
       isRestrictedTokenMember,
       isOverleaf,
       gitBridgeEnabled,
+      githubSyncEnabled,
+      zoteroEnabled,
     ]
   )
 
@@ -166,11 +168,11 @@ export const RailLayout = () => {
         title: t('settings'),
         action: () => {
           sendEvent('rail-click', { tab: 'settings' })
-          setLeftMenuShown(true)
+          setSettingsShown(true)
         },
       },
     ],
-    [setLeftMenuShown, t, sendEvent]
+    [setSettingsShown, t, sendEvent]
   )
 
   useCommandProvider(
@@ -178,13 +180,13 @@ export const RailLayout = () => {
       {
         id: 'open-settings',
         handler: () => {
-          setLeftMenuShown(true)
+          setSettingsShown(true)
         },
         menuLabel: t('settings'),
         label: t('open_settings'),
       },
     ],
-    [t, setLeftMenuShown]
+    [t, setSettingsShown]
   )
 
   const onTabSelect = useCallback(

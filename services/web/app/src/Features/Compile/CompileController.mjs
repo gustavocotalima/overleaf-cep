@@ -46,13 +46,12 @@ function getOutputFilesArchiveSpecification(projectId, userId, buildId) {
 }
 
 async function _getSplitTestOptions(req, res) {
-  const { variant } = await SplitTestHandler.promises.getAssignment(
+  const compileFromHistory = await SplitTestHandler.promises.featureFlagEnabled(
     req,
     res,
     'compile-from-history',
     { includeReferer: true }
   )
-  const compileFromHistory = variant === 'enabled'
 
   const pdfDownloadDomain = Settings.pdfDownloadDomain
   const enablePdfCaching = Settings.enablePdfCaching
@@ -67,11 +66,20 @@ async function _getSplitTestOptions(req, res) {
   }
 
   const pdfCachingMinChunkSize = Settings.pdfCachingMinChunkSize
+
+  const enableCheckpoint = await SplitTestHandler.promises.featureFlagEnabled(
+    req,
+    res,
+    'compile-with-checkpoint',
+    { includeReferer: true }
+  )
+
   return {
     compileFromHistory,
     pdfDownloadDomain,
     enablePdfCaching,
     pdfCachingMinChunkSize,
+    enableCheckpoint,
   }
 }
 
@@ -206,11 +214,15 @@ const _CompileController = {
       pdfCachingMinChunkSize,
       pdfDownloadDomain,
       compileFromHistory,
+      enableCheckpoint,
     } = await _getSplitTestOptions(req, res)
     if (Features.hasFeature('saas')) {
       options.compileFromClsiCache = true
       options.populateClsiCache = true
       options.compileFromHistory = compileFromHistory
+      if (enableCheckpoint) {
+        options.enableCheckpoint = enableCheckpoint
+      }
     }
     options.enablePdfCaching = enablePdfCaching
     if (enablePdfCaching) {
@@ -326,7 +338,8 @@ const _CompileController = {
     }
     options.compileGroup =
       req.body?.compileGroup || Settings.defaultFeatures.compileGroup
-    options.compileBackendClass = Settings.apis.clsi.submissionBackendClass
+    options.compileBackendClass =
+      Settings.apis.clsi.submissionCompileBackendClass
     options.timeout =
       req.body?.timeout || Settings.defaultFeatures.compileTimeout
     const { status, outputFiles, clsiServerId, validationProblems } =
